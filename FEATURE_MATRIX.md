@@ -12,7 +12,9 @@
 | WEP/WPA key recovery | Not implemented | No unvalidated crypto or recovery claims |
 | Capture decryption | Not implemented | No keys are accepted or produced |
 | Wordlists | Not implemented | Avoids presenting unusable CPU/memory-heavy cracking |
-| Live Wi-Fi/monitor mode/injection | Impossible on stock hardware | No general-purpose 802.11 chipset |
+| Live Wi-Fi on stock Flipper | Impossible on stock hardware | No general-purpose 802.11 chipset |
+| External passive Wi-Fi capture | Implemented; hardware validation pending | Genuine `airodump-ng` on Linux/Pi with monitor-mode adapter; fixed UART controller protocol; real capture-derived counters |
+| External arbitrary Aircrack shell/injection | Not exposed by Flipper | Full CLI remains on Linux; bridge deliberately has no arbitrary command, replay, deauthentication, or jamming control |
 | Live Sub-GHz | Supported | Internal CC1101 RX, real RSSI, hysteretic activity crossings, hardware frequency, time, history; no TX |
 | Live NFC | Supported detection | Actual stock NFC scan and protocol identification; scanner API does not expose raw frames or UID |
 | Saved NFC | Supported | Official `nfc_device_load`; protocol, device name, legitimate saved UID in hex |

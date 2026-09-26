@@ -1,6 +1,6 @@
 # Aircrack-ng FZ
 
-Aircrack-ng FZ is a read-only Flipper Zero application for inspecting Aircrack-compatible capture files and analyzing the receive hardware built into a stock Flipper Zero. It does **not** add Wi-Fi hardware or turn the Flipper Zero into a Wi-Fi adapter.
+Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.3 also adds an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
 
 Current release: **v1.0.3**.
 
@@ -51,6 +51,19 @@ This is a receive-only activity analyzer. An event is an RSSI threshold crossing
 - `Scanning` means no supported tag has been detected. The app does not invent a result when no tag is present.
 - Press **Back** before opening another radio application so the current backend is released.
 
+### External Aircrack-ng on Raspberry Pi/Linux
+
+This mode uses the real `airodump-ng` executable on the companion computer; it does not imitate packets or generate results. Install and configure the companion first by following [EXTERNAL_WIFI.md](EXTERNAL_WIFI.md).
+
+1. Connect the Flipper and Pi with crossed 3.3 V UART TX/RX and a common ground.
+2. Start the bridge on the Pi with an already-created monitor-mode interface.
+3. In **Settings**, select the same UART baud and the authorized Wi-Fi channel.
+4. Open **External Aircrack-ng**. The screen must report the Pi's actual Aircrack-ng version and interface.
+5. Press **OK** to start/stop a real `airodump-ng` capture. The displayed packet, frame-type, byte, and EAPOL counters come from the growing capture file. Captures remain on the Pi at the path reported by the bridge.
+6. Press **Back** to stop capture, close UART, and restore the Flipper expansion service.
+
+The complete unmodified Aircrack-ng command-line suite remains available directly on the Pi. The Flipper UI currently controls passive capture; it does not expose arbitrary shell commands or disruptive packet-injection/deauthentication operations.
+
 ### Saved files, reports, and diagnostics
 
 - **Saved Files** opens existing `.nfc`, `.rfid`, and `.sub` files read-only through the official format loaders.
@@ -60,7 +73,7 @@ This is a receive-only activity analyzer. An event is an RSSI threshold crossing
 
 ## What the app does not do
 
-Aircrack-ng FZ does not transmit, capture Wi-Fi over the Flipper's native radios, validate WPA handshakes, crack passwords, inject packets, replay signals, clone credentials, deauthenticate clients, bypass authentication, brute-force keys, or jam radio traffic. Sub-GHz, NFC, and LF RFID observations are never presented as Wi-Fi results.
+Aircrack-ng FZ does not transmit or capture Wi-Fi over the Flipper's native radios. Its external bridge performs passive capture through genuine Aircrack-ng on separate Linux hardware; it does not expose packet injection, replay, deauthentication, or jamming. The Flipper-side offline parser does not validate WPA handshakes or recover keys. Sub-GHz, NFC, and LF RFID observations are never presented as Wi-Fi results.
 
 Only inspect files, tags, and credentials that you own or are authorized to test. See [FEATURE_MATRIX.md](FEATURE_MATRIX.md), [BACKEND_COMPATIBILITY.md](BACKEND_COMPATIBILITY.md), [SECURITY.md](SECURITY.md), and [TESTING.md](TESTING.md) for exact support and validation boundaries.
 

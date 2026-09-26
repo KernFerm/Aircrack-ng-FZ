@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "../acf_parser.h"
+#include "../acf_external_protocol.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -179,12 +180,60 @@ static void test_external_fixture(const char* path, bool require_eapol) {
     free(data);
 }
 
+typedef struct {
+    unsigned count;
+    AcfExternalMessage last;
+} MessageSink;
+
+static void receive_external(const AcfExternalMessage* message, void* context) {
+    MessageSink* sink = context;
+    sink->count++;
+    sink->last = *message;
+}
+
+static void test_external_protocol(void) {
+    AcfExternalMessage message;
+    assert(acf_external_parse_line(
+        "ACF1 INFO 1 1.0.3 1.7 wlan1mon /var/lib/aircrack-fz/captures/a.cap",
+        &message));
+    assert(message.type == AcfExternalMessageInfo);
+    assert(message.protocol_version == 1);
+    assert(strcmp(message.aircrack_version, "1.7") == 0);
+    assert(acf_external_parse_line(
+        "ACF1 STATUS CAPTURING 6 192 25081 147 45 0 4 0 END",
+        &message));
+    assert(message.type == AcfExternalMessageStatus);
+    assert(message.channel == 6 && message.packets == 192 && message.eapol == 4);
+    assert(!acf_external_parse_line("ACF1 STATUS CAPTURING 6 1 2 3 4 5 6 END", &message));
+    assert(!acf_external_parse_line(
+        "ACF1 STATUS IDLE 0 18446744073709551616 0 0 0 0 0 0 END",
+        &message));
+    assert(!acf_external_parse_line("ACF1 START 6", &message));
+
+    AcfExternalDecoder decoder;
+    acf_external_decoder_reset(&decoder);
+    MessageSink sink = {0};
+    const unsigned char first[] = "ACF1 INFO 1 1.0.3 1.7 ";
+    const unsigned char second[] = "wlan1mon /captures/a.cap\r\n";
+    acf_external_decoder_feed(&decoder, first, sizeof(first) - 1, receive_external, &sink);
+    assert(sink.count == 0);
+    acf_external_decoder_feed(&decoder, second, sizeof(second) - 1, receive_external, &sink);
+    assert(sink.count == 1 && sink.last.type == AcfExternalMessageInfo);
+
+    unsigned char oversized[ACF_EXTERNAL_LINE_MAX + 16];
+    memset(oversized, 'A', sizeof(oversized));
+    oversized[sizeof(oversized) - 1] = '\n';
+    acf_external_decoder_feed(&decoder, oversized, sizeof(oversized), receive_external, &sink);
+    assert(sink.count == 1);
+}
+
 int main(int argc, char** argv) {
     test_pcap_known_answer();
     test_ivs2_known_answer();
     test_pcapng_known_answer();
     test_malformed_truncated_cancelled();
     test_large_stream_is_bounded();
+    test_external_protocol();
     for(int i = 1; i < argc; i++) test_external_fixture(argv[i], i == 1);
     puts("All parser tests passed.");
     return 0;

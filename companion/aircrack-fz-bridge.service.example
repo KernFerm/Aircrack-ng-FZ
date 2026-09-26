@@ -1,0 +1,18 @@
+[Unit]
+Description=Aircrack-ng FZ UART bridge
+After=multi-user.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/opt/aircrack-fz/venv/bin/python /opt/aircrack-fz/aircrack_fz_bridge.py --interface wlan1mon --serial /dev/serial0 --baud 115200
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/aircrack-fz
+
+[Install]
+WantedBy=multi-user.target

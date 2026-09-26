@@ -8,7 +8,7 @@ Run:
 python tests/run_tests.py
 ```
 
-The host-native C tests compile `acf_parser.c` plus the host-only `parser_test.c.host` harness with MSVC `/W4 /WX` (or `cc -Wall -Wextra -Werror` elsewhere) and validate:
+The host-native C tests compile `acf_parser.c`, `acf_external_protocol.c`, and the host-only `parser_test.c.host` harness with MSVC `/W4 /WX` (or `cc -Wall -Wextra -Werror` elsewhere) and validate:
 
 - known-answer PCAP beacon/SSID/BSSID, short control-frame, ordinary EAPOL, and QoS/HT-control EAPOL classification;
 - known-answer PCAPNG section/interface/enhanced-packet parsing;
@@ -17,8 +17,11 @@ The host-native C tests compile `acf_parser.c` plus the host-only `parser_test.c
 - cancellation before record processing;
 - 50,000-record/2 MB input with a measured maximum read request of 512 bytes;
 - upstream Aircrack-ng `test/wpa.cap`, copied unchanged to `tests/fixtures/wpa.cap`, with real packet and EAPOL results.
+- exact ACF1 INFO/STATUS parsing, fragmented UART delivery, oversized-line rejection, malformed fields, and 64-bit overflow rejection.
 
 Result on 2026-09-26: all parser tests passed.
+
+The companion's host tests run with `python tests/test_bridge.py` and validate real 802.11/Radiotap frame classification, EAPOL recognition, unsupported-link rejection, and bounded protocol tokens. Result on 2026-09-26: 4/4 passed. `python -m py_compile companion/aircrack_fz_bridge.py` also passed.
 
 ## Firmware build validation
 
@@ -29,7 +32,7 @@ python -m ufbt
 
 Validated against official SDK 1.4.3, target f7, API 87.1. Compiler and linker diagnostics are treated as errors by the SDK build. The artifact is `dist/aircrack_ng_fz.fap`.
 
-Current release artifact: 30,364 bytes; SHA-256 `450BAF7328819787CBAF2FBCF2387778F570FBA92FB9523A80EEF4221701FFEB`.
+Current release artifact: 41,356 bytes; SHA-256 `9BB5CAEBF911C4FBDAC4FC3F588D46B16B7FB755CC98CB630C945E06D28E0AD5`.
 
 A source-only temporary tree containing only `application.fam` and the six production C/header files was cache-cleaned and fully recompiled on 2026-09-25. All three production C files compiled, linked, passed APPCHK, and generated a genuine FAP, confirming that ignored/generated files are not build inputs.
 
@@ -61,7 +64,7 @@ Tests performed on an attached stock Flipper Zero running official firmware 1.4.
 - After both lifecycle tests, the stock Sub-GHz, NFC, and 125 kHz RFID applications opened and scanned normally with no busy state, freeze, or crash, confirming resource cleanup across application boundaries.
 - The final candidate FAP passed target/API validation and was installed over USB on 2026-09-26.
 
-These results validate resource acquisition, idle/no-tag behavior, genuine Sub-GHz measurement, and the tested cleanup paths. They do not validate NFC or LF tag identification because no authorized tags were available.
+These results validate resource acquisition, idle/no-tag behavior, genuine Sub-GHz measurement, and the tested cleanup paths. They do not validate NFC or LF tag identification because no authorized tags were available. They also predate the external Linux/Pi controller and therefore do not validate its physical UART or monitor-mode path.
 
 The installed FAP was scanned after the on-device fixture tests: it contains none of the fixture filenames or paths. Production C/header sources contain no TODO, FIXME, placeholder, pseudocode, simulation, example-result, transmit, replay, emulation, cloning, brute-force, deauthentication, injection, or private-header implementation path. The only `injection` source match is explanatory compatibility text stating that it is unavailable.
 
@@ -73,6 +76,7 @@ These tests require a physical, authorized Flipper Zero and cannot be truthfully
 2. NFC: scan authorized ISO14443-A/B, ISO15693, and FeliCa samples where available; verify only detected protocols appear and removal/re-entry remains responsive.
 3. LF RFID: read authorized tags of multiple supported protocols; compare decoded identifier bytes with the stock RFID app.
 4. Remove the SD card during saved-file parsing; verify a closed error and no crash. Repeat report, logging, and parsing with a full/read-only card. SD removal during report generation and live logging has already passed as recorded above.
+5. With a Raspberry Pi and authorized monitor-mode adapter, verify the ACF1 handshake, real Aircrack-ng/interface display, start/stop behavior, increasing capture-derived counters, saved PCAP path, disconnect recovery, and clean UART/expansion release. This is pending because the hardware is not yet available.
 
 No claim of complete physical tag/protocol coverage should be made until the remaining checklist is executed on authorized hardware and the results are recorded here.
 

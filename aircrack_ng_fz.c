@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 #include "acf_parser.h"
 #include "acf_radio.h"
+#include "acf_external.h"
 
 #include <furi.h>
 #include <furi/core/memmgr.h>
@@ -27,6 +28,7 @@
 #define ACF_DATA_DIR APP_DATA_PATH("")
 #define ACF_LOG_PATH APP_DATA_PATH("radio_log.csv")
 #define ACF_REPORT_PATH APP_DATA_PATH("report.txt")
+#define ACF_APP_VERSION "1.0.3"
 
 typedef enum {
     AcfViewMain,
@@ -35,11 +37,13 @@ typedef enum {
     AcfViewBrowser,
     AcfViewText,
     AcfViewRadio,
+    AcfViewExternal,
     AcfViewSettings,
 } AcfViewId;
 
 typedef enum {
     AcfMenuOffline,
+    AcfMenuExternalWifi,
     AcfMenuSubGhz,
     AcfMenuNfc,
     AcfMenuLfRfid,
@@ -75,6 +79,7 @@ typedef struct {
     Widget* widget;
     VariableItemList* settings;
     View* radio_view;
+    View* external_view;
     FuriString* path;
     FuriString* text;
     FuriThread* worker;
@@ -88,6 +93,11 @@ typedef struct {
     AcfViewId current_view;
     AcfViewId browser_return;
     AcfRadio* radio;
+    AcfExternal* external;
+    uint32_t external_baud;
+    uint8_t external_baud_index;
+    uint32_t external_channel;
+    uint8_t external_channel_index;
     uint32_t frequency;
     uint8_t frequency_index;
     volatile bool logging;
@@ -108,8 +118,18 @@ typedef struct {
     uint32_t revision;
 } AcfRadioViewModel;
 
+typedef struct {
+    AcfApp* app;
+    uint32_t revision;
+} AcfExternalViewModel;
+
 static const uint32_t acf_frequencies[] = {315000000, 433920000, 868350000, 915000000};
 static const char* const acf_frequency_names[] = {"315.00", "433.92", "868.35", "915.00"};
+static const uint32_t acf_external_bauds[] = {115200U, 230400U, 460800U};
+static const char* const acf_external_baud_names[] = {"115200", "230400", "460800"};
+static const uint32_t acf_external_channels[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+static const char* const acf_external_channel_names[] = {
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"};
 
 static void acf_switch(AcfApp* app, AcfViewId view) {
     app->current_view = view;
@@ -556,12 +576,68 @@ static void acf_start_radio(AcfApp* app, AcfRadioMode mode) {
     view_commit_model(app->radio_view, true);
 }
 
+static void acf_external_draw(Canvas* canvas, void* model_context) {
+    const AcfExternalViewModel* model = model_context;
+    AcfExternalSnapshot snapshot;
+    acf_external_snapshot(model->app->external, &snapshot);
+    canvas_set_font(canvas, FontPrimary);
+    canvas_draw_str(canvas, 2, 10, "EXTERNAL AIRCRACK");
+    canvas_set_font(canvas, FontSecondary);
+    char line[80];
+    if(!snapshot.active) {
+        canvas_draw_str(canvas, 2, 25, "UART is not active");
+    } else if(!snapshot.connected) {
+        snprintf(line, sizeof(line), "Waiting for Pi @ %" PRIu32, model->app->external_baud);
+        canvas_draw_str(canvas, 2, 23, line);
+        canvas_draw_str(canvas, 2, 35, "Protocol: ACF1");
+        if(snapshot.error[0]) {
+            snprintf(line, sizeof(line), "Error: %.18s", snapshot.error);
+            canvas_draw_str(canvas, 2, 48, line);
+        }
+    } else {
+        snprintf(line, sizeof(line), "Aircrack %.16s  %.12s", snapshot.aircrack_version, snapshot.interface_name);
+        canvas_draw_str(canvas, 2, 21, line);
+        snprintf(line, sizeof(line), "%.10s  Ch %" PRIu32, snapshot.state, snapshot.channel);
+        canvas_draw_str(canvas, 2, 31, line);
+        snprintf(line, sizeof(line), "Packets %" PRIu64 "  EAPOL %" PRIu64, snapshot.packets, snapshot.eapol);
+        canvas_draw_str(canvas, 2, 41, line);
+        snprintf(line, sizeof(line), "M/D/C %" PRIu64 "/%" PRIu64 "/%" PRIu64, snapshot.management, snapshot.data, snapshot.control);
+        canvas_draw_str(canvas, 2, 51, line);
+    }
+    canvas_draw_str(canvas, 2, 63, snapshot.connected ? "OK start/stop   Back" : "Back");
+}
+
+static bool acf_external_input(InputEvent* event, void* context) {
+    AcfApp* app = context;
+    if(event->type != InputTypeShort || event->key != InputKeyOk) return false;
+    AcfExternalSnapshot snapshot;
+    acf_external_snapshot(app->external, &snapshot);
+    if(snapshot.connected) {
+        if(snapshot.capturing) acf_external_capture_stop(app->external);
+        else acf_external_capture_start(app->external, app->external_channel);
+    }
+    AcfExternalViewModel* model = view_get_model(app->external_view);
+    model->revision++;
+    view_commit_model(app->external_view, true);
+    return true;
+}
+
+static void acf_start_external(AcfApp* app) {
+    acf_external_start(app->external, app->external_baud);
+    acf_switch(app, AcfViewExternal);
+    AcfExternalViewModel* model = view_get_model(app->external_view);
+    model->revision++;
+    view_commit_model(app->external_view, true);
+}
+
 static void acf_write_report(AcfApp* app) {
     storage_common_mkdir(app->storage, ACF_DATA_DIR);
     File* file = storage_file_alloc(app->storage);
     bool ok = file && storage_file_open(file, ACF_REPORT_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS);
     if(ok) {
-        char report[512];
+        AcfExternalSnapshot external;
+        acf_external_snapshot(app->external, &external);
+        char report[768];
         int len = snprintf(
             report,
             sizeof(report),
@@ -569,14 +645,26 @@ static void acf_write_report(AcfApp* app) {
             "\nMalformed files: %" PRIu32 "\nRadio events: %" PRIu32
             "\nLast capture format: %s\nLast packet count: %" PRIu32
             "\nLast EAPOL frames: %" PRIu32
-            "\nNotice: EAPOL frames are not claimed as a valid WPA handshake.\n",
+            "\nNotice: EAPOL frames are not claimed as a valid WPA handshake."
+            "\nExternal connected: %s\nExternal Aircrack: %s\nExternal interface: %s"
+            "\nExternal state/channel: %s/%" PRIu32
+            "\nExternal packets/EAPOL: %" PRIu64 "/%" PRIu64
+            "\nExternal capture: %s\n",
             (uint32_t)furi_hal_rtc_get_timestamp(),
             app->files_analyzed,
             app->malformed_files,
             app->total_radio_events,
             acf_format_name(app->analysis.format),
             app->analysis.packets,
-            app->analysis.eapol_frames);
+            app->analysis.eapol_frames,
+            external.connected ? "yes" : "no",
+            external.aircrack_version[0] ? external.aircrack_version : "not reported",
+            external.interface_name[0] ? external.interface_name : "not reported",
+            external.state,
+            external.channel,
+            external.packets,
+            external.eapol,
+            external.capture_path[0] ? external.capture_path : "not reported");
         ok = len > 0 && (size_t)len < sizeof(report) &&
              storage_file_write(file, report, (size_t)len) == (size_t)len;
         storage_file_close(file);
@@ -593,6 +681,9 @@ static void acf_main_selected(void* context, uint32_t index) {
     switch(index) {
     case AcfMenuOffline:
         acf_switch(app, AcfViewOffline);
+        break;
+    case AcfMenuExternalWifi:
+        acf_start_external(app);
         break;
     case AcfMenuSubGhz:
         acf_start_radio(app, AcfRadioSubGhz);
@@ -627,7 +718,7 @@ static void acf_main_selected(void* context, uint32_t index) {
         acf_set_text(
             app,
             "Compatibility",
-            "Offline: PCAP, PCAPNG, CAP, IVS2\nLive: Sub-GHz, NFC, LF RFID\n\nStock Flipper has no 802.11 chipset. Live Wi-Fi, monitor mode and injection are unavailable.");
+            "Offline: PCAP, PCAPNG, CAP, IVS2\nLive: Sub-GHz, NFC, LF RFID\nExternal: Linux/Pi Aircrack-ng over UART\n\nThe Pi and a monitor-mode adapter provide the Wi-Fi hardware.");
         break;
     case AcfMenuResourceTest:
         acf_start_resource_test(app);
@@ -652,6 +743,20 @@ static void acf_logging_changed(VariableItem* item) {
     variable_item_set_current_value_text(item, app->logging ? "On" : "Off");
 }
 
+static void acf_external_baud_changed(VariableItem* item) {
+    AcfApp* app = variable_item_get_context(item);
+    app->external_baud_index = variable_item_get_current_value_index(item);
+    app->external_baud = acf_external_bauds[app->external_baud_index];
+    variable_item_set_current_value_text(item, acf_external_baud_names[app->external_baud_index]);
+}
+
+static void acf_external_channel_changed(VariableItem* item) {
+    AcfApp* app = variable_item_get_context(item);
+    app->external_channel_index = variable_item_get_current_value_index(item);
+    app->external_channel = acf_external_channels[app->external_channel_index];
+    variable_item_set_current_value_text(item, acf_external_channel_names[app->external_channel_index]);
+}
+
 static bool acf_custom_event(void* context, uint32_t event) {
     AcfApp* app = context;
     if(event == AcfEventAnalysisDone) {
@@ -671,6 +776,9 @@ static bool acf_back(void* context) {
         acf_radio_snapshot(app->radio, &snapshot);
         app->total_radio_events += snapshot.events;
         acf_radio_stop(app->radio);
+        acf_switch(app, AcfViewMain);
+    } else if(app->current_view == AcfViewExternal) {
+        acf_external_stop(app->external);
         acf_switch(app, AcfViewMain);
     } else if(app->current_view == AcfViewBrowser) {
         file_browser_stop(app->browser);
@@ -698,6 +806,10 @@ static void acf_tick(void* context) {
         AcfRadioViewModel* model = view_get_model(app->radio_view);
         model->revision++;
         view_commit_model(app->radio_view, true);
+    } else if(app->current_view == AcfViewExternal) {
+        AcfExternalViewModel* model = view_get_model(app->external_view);
+        model->revision++;
+        view_commit_model(app->external_view, true);
     } else if(
         app->current_view == AcfViewText && app->worker && app->task == AcfTaskResourceTest &&
         !app->cancel) {
@@ -726,11 +838,15 @@ static AcfApp* acf_app_alloc(void) {
     app->widget = widget_alloc();
     app->settings = variable_item_list_alloc();
     app->radio_view = view_alloc();
+    app->external_view = view_alloc();
     app->radio = acf_radio_alloc();
+    app->external = acf_external_alloc();
     if(!app->dispatcher || !app->main_menu || !app->offline_menu || !app->saved_menu ||
        !app->path || !app->text || !app->browser || !app->widget || !app->settings ||
-       !app->radio_view || !app->radio) {
+       !app->radio_view || !app->external_view || !app->radio || !app->external) {
+        if(app->external) acf_external_free(app->external);
         if(app->radio) acf_radio_free(app->radio);
+        if(app->external_view) view_free(app->external_view);
         if(app->radio_view) view_free(app->radio_view);
         if(app->settings) variable_item_list_free(app->settings);
         if(app->widget) widget_free(app->widget);
@@ -748,9 +864,15 @@ static AcfApp* acf_app_alloc(void) {
     }
     app->frequency_index = 1;
     app->frequency = acf_frequencies[app->frequency_index];
+    app->external_baud_index = 0;
+    app->external_baud = acf_external_bauds[app->external_baud_index];
+    app->external_channel_index = 5;
+    app->external_channel = acf_external_channels[app->external_channel_index];
     app->log_worker = furi_thread_alloc_ex("AcfLog", 2048, acf_log_worker, app);
     if(!app->log_worker) {
+        acf_external_free(app->external);
         acf_radio_free(app->radio);
+        view_free(app->external_view);
         view_free(app->radio_view);
         variable_item_list_free(app->settings);
         widget_free(app->widget);
@@ -775,10 +897,19 @@ static AcfApp* acf_app_alloc(void) {
     radio_model->app = app;
     radio_model->revision = 0;
     view_commit_model(app->radio_view, false);
+    view_set_context(app->external_view, app);
+    view_set_draw_callback(app->external_view, acf_external_draw);
+    view_set_input_callback(app->external_view, acf_external_input);
+    view_allocate_model(app->external_view, ViewModelTypeLocking, sizeof(AcfExternalViewModel));
+    AcfExternalViewModel* external_model = view_get_model(app->external_view);
+    external_model->app = app;
+    external_model->revision = 0;
+    view_commit_model(app->external_view, false);
     file_browser_set_callback(app->browser, acf_browser_selected, app);
 
-    submenu_set_header(app->main_menu, "Aircrack-ng FZ (not Wi-Fi HW)");
+    submenu_set_header(app->main_menu, "Aircrack-ng FZ v" ACF_APP_VERSION);
     submenu_add_item(app->main_menu, "Offline Aircrack Analysis", AcfMenuOffline, acf_main_selected, app);
+    submenu_add_item(app->main_menu, "External Aircrack-ng", AcfMenuExternalWifi, acf_main_selected, app);
     submenu_add_item(app->main_menu, "Sub-GHz Analyzer", AcfMenuSubGhz, acf_main_selected, app);
     submenu_add_item(app->main_menu, "NFC Analyzer", AcfMenuNfc, acf_main_selected, app);
     submenu_add_item(app->main_menu, "LF RFID Analyzer", AcfMenuLfRfid, acf_main_selected, app);
@@ -808,6 +939,18 @@ static AcfApp* acf_app_alloc(void) {
         variable_item_list_add(app->settings, "Hardware logging", 2, acf_logging_changed, app);
     variable_item_set_current_value_index(logging, 0);
     variable_item_set_current_value_text(logging, "Off");
+    VariableItem* baud = variable_item_list_add(
+        app->settings, "External baud", COUNT_OF(acf_external_bauds), acf_external_baud_changed, app);
+    variable_item_set_current_value_index(baud, app->external_baud_index);
+    variable_item_set_current_value_text(baud, acf_external_baud_names[app->external_baud_index]);
+    VariableItem* channel = variable_item_list_add(
+        app->settings, "Wi-Fi channel", COUNT_OF(acf_external_channels), acf_external_channel_changed, app);
+    variable_item_set_current_value_index(channel, app->external_channel_index);
+    variable_item_set_current_value_text(channel, acf_external_channel_names[app->external_channel_index]);
+    VariableItem* version = variable_item_list_add(app->settings, "App version", 1, NULL, app);
+    variable_item_set_current_value_text(version, ACF_APP_VERSION);
+    VariableItem* protocol = variable_item_list_add(app->settings, "External protocol", 1, NULL, app);
+    variable_item_set_current_value_text(protocol, "ACF1");
 
     view_dispatcher_set_event_callback_context(app->dispatcher, app);
     view_dispatcher_set_navigation_event_callback(app->dispatcher, acf_back);
@@ -819,6 +962,7 @@ static AcfApp* acf_app_alloc(void) {
     view_dispatcher_add_view(app->dispatcher, AcfViewBrowser, file_browser_get_view(app->browser));
     view_dispatcher_add_view(app->dispatcher, AcfViewText, widget_get_view(app->widget));
     view_dispatcher_add_view(app->dispatcher, AcfViewRadio, app->radio_view);
+    view_dispatcher_add_view(app->dispatcher, AcfViewExternal, app->external_view);
     view_dispatcher_add_view(app->dispatcher, AcfViewSettings, variable_item_list_get_view(app->settings));
     view_dispatcher_attach_to_gui(app->dispatcher, app->gui, ViewDispatcherTypeFullscreen);
     return app;
@@ -833,6 +977,7 @@ static void acf_app_free(AcfApp* app) {
         furi_thread_free(app->log_worker);
         app->log_worker = NULL;
     }
+    acf_external_free(app->external);
     acf_radio_free(app->radio);
     view_dispatcher_remove_view(app->dispatcher, AcfViewMain);
     view_dispatcher_remove_view(app->dispatcher, AcfViewOffline);
@@ -840,8 +985,10 @@ static void acf_app_free(AcfApp* app) {
     view_dispatcher_remove_view(app->dispatcher, AcfViewBrowser);
     view_dispatcher_remove_view(app->dispatcher, AcfViewText);
     view_dispatcher_remove_view(app->dispatcher, AcfViewRadio);
+    view_dispatcher_remove_view(app->dispatcher, AcfViewExternal);
     view_dispatcher_remove_view(app->dispatcher, AcfViewSettings);
     view_free(app->radio_view);
+    view_free(app->external_view);
     variable_item_list_free(app->settings);
     widget_free(app->widget);
     file_browser_free(app->browser);

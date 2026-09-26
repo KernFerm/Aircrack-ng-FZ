@@ -71,6 +71,7 @@ def main() -> int:
                 "/WX",
                 f'/I{ROOT}',
                 str(ROOT / "acf_parser.c"),
+                str(ROOT / "acf_external_protocol.c"),
                 f'/Tc{ROOT / "tests" / "parser_test.c.host"}',
                 f'/Fe:{executable}',
             ],
@@ -84,7 +85,7 @@ def main() -> int:
             raise SystemExit("C compiler not found")
         executable = BUILD / "parser_test"
         subprocess.run(
-            [compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", f"-I{ROOT}", str(ROOT / "acf_parser.c"), "-x", "c", str(ROOT / "tests" / "parser_test.c.host"), "-o", str(executable)],
+            [compiler, "-std=c11", "-Wall", "-Wextra", "-Werror", f"-I{ROOT}", str(ROOT / "acf_parser.c"), str(ROOT / "acf_external_protocol.c"), "-x", "c", str(ROOT / "tests" / "parser_test.c.host"), "-o", str(executable)],
             check=True,
         )
     args = [str(executable)]
