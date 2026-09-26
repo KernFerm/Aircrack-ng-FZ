@@ -1,0 +1,38 @@
+# JavaScript dependencies (repository policy)
+node_modules/
+**/node_modules/
+
+# Flipper/uFBT output and native test output
+.ufbt/
+.vscode/
+build/
+build-*/
+dist/debug/
+*.o
+*.obj
+*.elf
+*.map
+*.d
+
+# Generated captures, reports, logs, and caches
+*.pcap.tmp
+*.pcapng.tmp
+*.cap.tmp
+*.ivs.tmp
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.snyk/
+
+# Local settings and secrets
+/to-do.md
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+credentials*
+secrets*
+*token*

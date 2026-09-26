@@ -1,0 +1,13 @@
+App(
+    appid="aircrack_ng_fz",
+    name="Aircrack-ng FZ",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="aircrack_ng_fz_app",
+    sources=["*.c"],
+    requires=["gui", "storage"],
+    stack_size=4096,
+    fap_category="Tools",
+    fap_description="Offline 802.11 capture and native radio analysis",
+    fap_author="Aircrack-ng contributors; Flipper port contributors",
+    fap_version="1.0.0",
+)

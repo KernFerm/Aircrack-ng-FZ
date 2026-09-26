@@ -1,0 +1,191 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+#include "../acf_parser.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct {
+    const unsigned char* data;
+    size_t size;
+    size_t position;
+    size_t largest_read;
+} MemoryReader;
+
+static size_t memory_read(void* context, void* output, size_t size) {
+    MemoryReader* reader = context;
+    if(size > reader->largest_read) reader->largest_read = size;
+    size_t remaining = reader->size - reader->position;
+    if(size > remaining) size = remaining;
+    memcpy(output, reader->data + reader->position, size);
+    reader->position += size;
+    return size;
+}
+
+static bool memory_seek(void* context, uint32_t offset) {
+    MemoryReader* reader = context;
+    if(offset > reader->size) return false;
+    reader->position = offset;
+    return true;
+}
+
+static uint64_t memory_tell(void* context) {
+    return ((MemoryReader*)context)->position;
+}
+
+static uint64_t memory_size(void* context) {
+    return ((MemoryReader*)context)->size;
+}
+
+static AcfStatus analyze(const unsigned char* data, size_t size, bool cancel, AcfAnalysis* result, size_t* largest) {
+    MemoryReader memory = {.data = data, .size = size};
+    AcfReader reader = {
+        .context = &memory,
+        .read = memory_read,
+        .seek = memory_seek,
+        .tell = memory_tell,
+        .size = memory_size,
+    };
+    AcfStatus status = acf_analyze(&reader, &cancel, result);
+    if(largest) *largest = memory.largest_read;
+    return status;
+}
+
+static void put16(unsigned char* p, unsigned value) {
+    p[0] = (unsigned char)value;
+    p[1] = (unsigned char)(value >> 8);
+}
+
+static void put32(unsigned char* p, uint32_t value) {
+    p[0] = (unsigned char)value;
+    p[1] = (unsigned char)(value >> 8);
+    p[2] = (unsigned char)(value >> 16);
+    p[3] = (unsigned char)(value >> 24);
+}
+
+static size_t add_pcap_record(unsigned char* output, const unsigned char* packet, size_t size) {
+    memset(output, 0, 16);
+    put32(output + 8, (uint32_t)size);
+    put32(output + 12, (uint32_t)size);
+    memcpy(output + 16, packet, size);
+    return 16 + size;
+}
+
+static void test_pcap_known_answer(void) {
+    unsigned char capture[320] = {0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0};
+    put32(capture + 16, 65535);
+    put32(capture + 20, 105);
+    size_t offset = 24;
+    unsigned char beacon[40] = {0x80, 0x00};
+    const unsigned char bssid[6] = {0x10, 0x20, 0x30, 0x40, 0x50, 0x60};
+    memcpy(beacon + 16, bssid, sizeof(bssid));
+    beacon[36] = 0;
+    beacon[37] = 2;
+    beacon[38] = 'A';
+    beacon[39] = 'P';
+    offset += add_pcap_record(capture + offset, beacon, sizeof(beacon));
+    unsigned char eapol[32] = {0x08, 0x00};
+    const unsigned char llc[] = {0xaa, 0xaa, 0x03, 0, 0, 0, 0x88, 0x8e};
+    memcpy(eapol + 24, llc, sizeof(llc));
+    offset += add_pcap_record(capture + offset, eapol, sizeof(eapol));
+    unsigned char acknowledgement[10] = {0xd4, 0x00};
+    offset += add_pcap_record(capture + offset, acknowledgement, sizeof(acknowledgement));
+
+    unsigned char qos_ht_eapol[38] = {0x88, 0x80};
+    memcpy(qos_ht_eapol + 30, llc, sizeof(llc));
+    offset += add_pcap_record(capture + offset, qos_ht_eapol, sizeof(qos_ht_eapol));
+
+    AcfAnalysis result;
+    size_t largest = 0;
+    assert(analyze(capture, offset, false, &result, &largest) == AcfStatusOk);
+    assert(result.format == AcfFormatPcap);
+    assert(result.packets == 4);
+    assert(result.management_frames == 1 && result.data_frames == 2);
+    assert(result.control_frames == 1);
+    assert(result.eapol_frames == 2);
+    assert(strcmp(result.first_ssid, "AP") == 0);
+    assert(result.has_bssid && memcmp(result.first_bssid, bssid, 6) == 0);
+    assert(largest <= 512);
+}
+
+static void test_ivs2_known_answer(void) {
+    const unsigned char ivs[] = {
+        0xae, 0x78, 0xd1, 0xff, 1, 0,
+        3, 0, 8, 0,
+        1, 2, 3, 4, 5, 6, 'A', 'P'};
+    AcfAnalysis result;
+    assert(analyze(ivs, sizeof(ivs), false, &result, NULL) == AcfStatusOk);
+    assert(result.format == AcfFormatIvs2);
+    assert(result.ivs2_records == 1);
+    assert(strcmp(result.first_ssid, "AP") == 0);
+}
+
+static void test_pcapng_known_answer(void) {
+    unsigned char data[256] = {0};
+    size_t p = 0;
+    put32(data + p, 0x0a0d0d0a); put32(data + p + 4, 28); put32(data + p + 8, 0x1a2b3c4d);
+    put16(data + p + 12, 1); put16(data + p + 14, 0); memset(data + p + 16, 0xff, 8); put32(data + p + 24, 28); p += 28;
+    put32(data + p, 1); put32(data + p + 4, 20); put16(data + p + 8, 105); put32(data + p + 12, 65535); put32(data + p + 16, 20); p += 20;
+    unsigned char frame[24] = {0x08, 0x40};
+    put32(data + p, 6); put32(data + p + 4, 56); put32(data + p + 8, 0); put32(data + p + 20, 24); put32(data + p + 24, 24);
+    memcpy(data + p + 28, frame, sizeof(frame)); put32(data + p + 52, 56); p += 56;
+    AcfAnalysis result;
+    assert(analyze(data, p, false, &result, NULL) == AcfStatusOk);
+    assert(result.format == AcfFormatPcapNg && result.packets == 1);
+    assert(result.data_frames == 1 && result.protected_frames == 1);
+}
+
+static void test_malformed_truncated_cancelled(void) {
+    unsigned char capture[64] = {0xd4, 0xc3, 0xb2, 0xa1, 2, 0, 4, 0};
+    put32(capture + 16, 32); put32(capture + 20, 105);
+    put32(capture + 32, 64); put32(capture + 36, 64);
+    AcfAnalysis result;
+    assert(analyze(capture, sizeof(capture), false, &result, NULL) == AcfStatusMalformed);
+    assert(analyze(capture, 30, false, &result, NULL) == AcfStatusMalformed);
+    assert(analyze(capture, sizeof(capture), true, &result, NULL) == AcfStatusCancelled);
+}
+
+static void test_large_stream_is_bounded(void) {
+    const size_t records = 50000;
+    const size_t size = 24 + records * 40;
+    unsigned char* capture = calloc(1, size);
+    assert(capture);
+    capture[0] = 0xd4; capture[1] = 0xc3; capture[2] = 0xb2; capture[3] = 0xa1;
+    capture[4] = 2; capture[6] = 4; put32(capture + 16, 65535); put32(capture + 20, 105);
+    unsigned char frame[24] = {0x08, 0x00};
+    size_t p = 24;
+    for(size_t i = 0; i < records; i++) p += add_pcap_record(capture + p, frame, sizeof(frame));
+    AcfAnalysis result;
+    size_t largest = 0;
+    assert(analyze(capture, size, false, &result, &largest) == AcfStatusOk);
+    assert(result.packets == records && largest <= 512);
+    free(capture);
+}
+
+static void test_external_fixture(const char* path, bool require_eapol) {
+    FILE* file = fopen(path, "rb");
+    assert(file);
+    assert(fseek(file, 0, SEEK_END) == 0);
+    long length = ftell(file);
+    assert(length > 0 && fseek(file, 0, SEEK_SET) == 0);
+    unsigned char* data = malloc((size_t)length);
+    assert(data && fread(data, 1, (size_t)length, file) == (size_t)length);
+    fclose(file);
+    AcfAnalysis result;
+    assert(analyze(data, (size_t)length, false, &result, NULL) == AcfStatusOk);
+    assert(result.packets > 0 || result.ivs2_records > 0);
+    if(require_eapol) assert(result.eapol_frames > 0);
+    free(data);
+}
+
+int main(int argc, char** argv) {
+    test_pcap_known_answer();
+    test_ivs2_known_answer();
+    test_pcapng_known_answer();
+    test_malformed_truncated_cancelled();
+    test_large_stream_is_bounded();
+    for(int i = 1; i < argc; i++) test_external_fixture(argv[i], i == 1);
+    puts("All parser tests passed.");
+    return 0;
+}

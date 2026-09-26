@@ -1,0 +1,15 @@
+Aircrack-ng FZ
+===============
+
+This work contains an independently adapted, bounded implementation of on-disk
+constants and structure semantics from Aircrack-ng, primarily
+include/aircrack-ng/support/pcap_local.h.
+
+Aircrack-ng copyright belongs to its respective contributors, including the
+copyright notices retained in the upstream project. Aircrack-ng-derived
+material retains its GNU GPL version 2-or-later terms. This repository is
+distributed under the compatible GNU GPL version 3 shown in LICENSE.
+
+Flipper-specific application, storage, GUI, NFC, LF RFID, and Sub-GHz code is a
+new adaptation. It is not endorsed by the Aircrack-ng or Flipper Devices teams.
+It adds no Wi-Fi hardware capability.
