@@ -2,6 +2,8 @@
 
 Aircrack-ng FZ is a read-only Flipper Zero application for inspecting Aircrack-compatible capture files and analyzing the receive hardware built into a stock Flipper Zero. It does **not** add Wi-Fi hardware or turn the Flipper Zero into a Wi-Fi adapter.
 
+Current release: **v1.0.3**.
+
 ## Install the FAP
 
 You need a Flipper Zero with a working microSD card. The supplied release build targets official firmware 1.4.3, target f7, API 87.1. A firmware build with an incompatible API may require the app to be rebuilt.

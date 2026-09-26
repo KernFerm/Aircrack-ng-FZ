@@ -29,7 +29,7 @@ python -m ufbt
 
 Validated against official SDK 1.4.3, target f7, API 87.1. Compiler and linker diagnostics are treated as errors by the SDK build. The artifact is `dist/aircrack_ng_fz.fap`.
 
-Current release artifact: 30,364 bytes; SHA-256 `A1DA9775E6DFDB18A4048BFFDBC92BB95D9C747FD41CBC8B9704A370FC707CC2`.
+Current release artifact: 30,364 bytes; SHA-256 `450BAF7328819787CBAF2FBCF2387778F570FBA92FB9523A80EEF4221701FFEB`.
 
 A source-only temporary tree containing only `application.fam` and the six production C/header files was cache-cleaned and fully recompiled on 2026-09-25. All three production C files compiled, linked, passed APPCHK, and generated a genuine FAP, confirming that ignored/generated files are not build inputs.
 
@@ -79,5 +79,10 @@ No claim of complete physical tag/protocol coverage should be made until the rem
 ## Snyk status
 
 - Dependency/repository analysis: not applicable; Snyk detected no supported target manifest.
-- Source analysis: invoked, but unavailable without Snyk authentication in this environment.
-- No Snyk result was hidden or converted into a passing result. Native C review and warning-clean builds remain separate from Snyk.
+- Authenticated Snyk Code analysis on 2026-09-26 initially reported eight low-severity findings in host-only test tooling: two shell-command construction paths and six unrestricted fixture paths. No production C/FAP finding, medium finding, or high finding was reported.
+- The test runner now invokes a compiler from fixed standard Visual Studio locations without a shell, and the fixture generator now uses fixed repository-contained input/output paths.
+- The authenticated rescan with `snyk code test --severity-threshold=low --remote-repo-url=https://github.com/KernFerm/Aircrack-ng-FZ` completed with `Total issues: 0` and exit code 0. No finding was ignored or suppressed.
+
+## CodeQL formatting remediation
+
+GitHub CodeQL reported 15 high-severity `cpp/wrong-type-format-argument` alerts in `aircrack_ng_fz.c`. The affected fixed-width `uint32_t`/`uint64_t` values now use the matching `<inttypes.h>` `PRIu32`/`PRIu64` macros; promoted byte arguments are explicitly cast for `%X`. The corrected production sources passed the warning-clean host suite and a cache-clean APPCHK build. GitHub will update the alert state after these changes are pushed and its code-scanning workflow reruns.

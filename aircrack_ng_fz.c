@@ -20,6 +20,7 @@
 #include <toolbox/protocols/protocol_dict.h>
 
 #include <stdio.h>
+#include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -138,7 +139,7 @@ static uint64_t acf_storage_size(void* context) {
 static void acf_hex_string(char* output, size_t output_size, const uint8_t* data, size_t size) {
     size_t used = 0;
     for(size_t i = 0; i < size && used + 2 < output_size; i++) {
-        used += snprintf(output + used, output_size - used, "%02X", data[i]);
+        used += snprintf(output + used, output_size - used, "%02X", (unsigned)data[i]);
     }
 }
 
@@ -203,9 +204,9 @@ static AcfStatus acf_load_saved_sub(AcfApp* app) {
         snprintf(
             app->saved_result,
             sizeof(app->saved_result),
-            "\e#Saved Sub-GHz file\nFrequency: %lu.%03lu MHz\nProtocol: %s\nVersion: %lu\n\nNo transmission is performed.",
-            frequency / 1000000UL,
-            (frequency / 1000UL) % 1000UL,
+            "\e#Saved Sub-GHz file\nFrequency: %" PRIu32 ".%03" PRIu32 " MHz\nProtocol: %s\nVersion: %" PRIu32 "\n\nNo transmission is performed.",
+            frequency / 1000000U,
+            (frequency / 1000U) % 1000U,
             furi_string_get_cstr(protocol),
             version);
     }
@@ -295,7 +296,7 @@ static void acf_append_worker_memory(AcfApp* app) {
     if(!app->worker_stack_free) return;
     furi_string_cat_printf(
         app->text,
-        "\n\nHeap: %zu -> %zu free\nHeap minimum: %zu\nWorker stack free: %lu/3072",
+        "\n\nHeap: %zu -> %zu free\nHeap minimum: %zu\nWorker stack free: %" PRIu32 "/3072",
         app->worker_heap_before,
         app->worker_heap_after,
         app->minimum_free_heap,
@@ -313,7 +314,7 @@ static void acf_show_analysis(AcfApp* app) {
                 app->text,
                 "\e#Resource Self-Test\n%s after %u/25 cycles.\n%s\n\nAll resources were released.",
                 acf_status_name(app->status),
-                app->resource_test_cycles,
+                (unsigned)app->resource_test_cycles,
                 snapshot.error[0] ? snapshot.error : "Stopped safely");
         }
         acf_append_worker_memory(app);
@@ -340,16 +341,19 @@ static void acf_show_analysis(AcfApp* app) {
                 bssid,
                 sizeof(bssid),
                 "%02X:%02X:%02X:%02X:%02X:%02X",
-                a->first_bssid[0],
-                a->first_bssid[1],
-                a->first_bssid[2],
-                a->first_bssid[3],
-                a->first_bssid[4],
-                a->first_bssid[5]);
+                (unsigned)a->first_bssid[0],
+                (unsigned)a->first_bssid[1],
+                (unsigned)a->first_bssid[2],
+                (unsigned)a->first_bssid[3],
+                (unsigned)a->first_bssid[4],
+                (unsigned)a->first_bssid[5]);
         }
         furi_string_printf(
             app->text,
-            "\e#Offline Aircrack\nFormat: %s  DLT: %lu\nPackets: %lu  Bytes: %llu\nMgmt/Data/Ctrl: %lu/%lu/%lu\nProtected: %lu  EAPOL: %lu\nIVS2/WPA records: %lu/%lu\nSSID: %s\nBSSID: %s",
+            "\e#Offline Aircrack\nFormat: %s  DLT: %" PRIu32 "\nPackets: %" PRIu32
+            "  Bytes: %" PRIu64 "\nMgmt/Data/Ctrl: %" PRIu32 "/%" PRIu32 "/%" PRIu32
+            "\nProtected: %" PRIu32 "  EAPOL: %" PRIu32 "\nIVS2/WPA records: %" PRIu32
+            "/%" PRIu32 "\nSSID: %s\nBSSID: %s",
             acf_format_name(a->format),
             a->link_type,
             a->packets,
@@ -445,8 +449,8 @@ static void acf_log_radio(AcfApp* app) {
         int length = snprintf(
             line,
             sizeof(line),
-            "%lu,%u,%lu,%s,%.1f,%lu,%s\n",
-            furi_hal_rtc_get_timestamp(),
+            "%" PRIu32 ",%u,%" PRIu32 ",%s,%.1f,%" PRIu32 ",%s\n",
+            (uint32_t)furi_hal_rtc_get_timestamp(),
             (unsigned)snapshot.mode,
             snapshot.frequency,
             snapshot.protocol,
@@ -494,19 +498,19 @@ static void acf_radio_draw(Canvas* canvas, void* model_context) {
         snprintf(
             line,
             sizeof(line),
-            "%lu.%03lu MHz",
-            snapshot.frequency / 1000000UL,
-            (snapshot.frequency / 1000UL) % 1000UL);
+            "%" PRIu32 ".%03" PRIu32 " MHz",
+            snapshot.frequency / 1000000U,
+            (snapshot.frequency / 1000U) % 1000U);
         canvas_draw_str(canvas, 2, 25, line);
         canvas_set_font(canvas, FontSecondary);
         snprintf(line, sizeof(line), "RSSI: %.1f dBm", (double)snapshot.rssi);
         canvas_draw_str(canvas, 2, 37, line);
-        snprintf(line, sizeof(line), "Events: %lu", snapshot.events);
+        snprintf(line, sizeof(line), "Events: %" PRIu32, snapshot.events);
         canvas_draw_str(canvas, 2, 48, line);
         if(snapshot.log_error) {
             canvas_draw_str(canvas, 2, 60, "LOG ERROR: check SD");
         } else if(snapshot.last_timestamp) {
-            snprintf(line, sizeof(line), "Last: %lu", snapshot.last_timestamp);
+            snprintf(line, sizeof(line), "Last: %" PRIu32, snapshot.last_timestamp);
             canvas_draw_str(canvas, 2, 60, line);
         } else {
             canvas_draw_str(canvas, 2, 60, "Last: --");
@@ -523,11 +527,16 @@ static void acf_radio_draw(Canvas* canvas, void* model_context) {
     snprintf(
         line,
         sizeof(line),
-        "Freq %lu.%03lu MHz",
-        snapshot.frequency / 1000000UL,
-        (snapshot.frequency / 1000UL) % 1000UL);
+        "Freq %" PRIu32 ".%03" PRIu32 " MHz",
+        snapshot.frequency / 1000000U,
+        (snapshot.frequency / 1000U) % 1000U);
     canvas_draw_str(canvas, 2, 21, line);
-    snprintf(line, sizeof(line), "Events %lu  T %lu", snapshot.events, snapshot.last_timestamp);
+    snprintf(
+        line,
+        sizeof(line),
+        "Events %" PRIu32 "  T %" PRIu32,
+        snapshot.events,
+        snapshot.last_timestamp);
     canvas_draw_str(canvas, 2, 31, line);
     snprintf(line, sizeof(line), "Protocol %s", snapshot.protocol);
     canvas_draw_str(canvas, 2, 41, line);
@@ -556,8 +565,12 @@ static void acf_write_report(AcfApp* app) {
         int len = snprintf(
             report,
             sizeof(report),
-            "Aircrack-ng FZ report\nGenerated: %lu\nFiles analyzed: %lu\nMalformed files: %lu\nRadio events: %lu\nLast capture format: %s\nLast packet count: %lu\nLast EAPOL frames: %lu\nNotice: EAPOL frames are not claimed as a valid WPA handshake.\n",
-            furi_hal_rtc_get_timestamp(),
+            "Aircrack-ng FZ report\nGenerated: %" PRIu32 "\nFiles analyzed: %" PRIu32
+            "\nMalformed files: %" PRIu32 "\nRadio events: %" PRIu32
+            "\nLast capture format: %s\nLast packet count: %" PRIu32
+            "\nLast EAPOL frames: %" PRIu32
+            "\nNotice: EAPOL frames are not claimed as a valid WPA handshake.\n",
+            (uint32_t)furi_hal_rtc_get_timestamp(),
             app->files_analyzed,
             app->malformed_files,
             app->total_radio_events,
@@ -599,7 +612,8 @@ static void acf_main_selected(void* context, uint32_t index) {
         snprintf(
             statistics,
             sizeof(statistics),
-            "Files analyzed: %lu\nMalformed: %lu\nRadio events: %lu\n\nCurrent session only. Saved reports and logs persist.",
+            "Files analyzed: %" PRIu32 "\nMalformed: %" PRIu32 "\nRadio events: %" PRIu32
+            "\n\nCurrent session only. Saved reports and logs persist.",
             app->files_analyzed,
             app->malformed_files,
             app->total_radio_events);
@@ -690,7 +704,7 @@ static void acf_tick(void* context) {
         furi_string_printf(
             app->text,
             "\e#Resource Self-Test\nCycle %u/25\nSub-GHz + NFC + LF RFID\n\nBack cancels safely.",
-            app->resource_test_cycles);
+            (unsigned)app->resource_test_cycles);
         widget_reset(app->widget);
         widget_add_text_scroll_element(
             app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));

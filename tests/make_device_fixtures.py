@@ -3,7 +3,11 @@
 
 from pathlib import Path
 import struct
-import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = ROOT / "tests" / "fixtures" / "wpa.cap"
+OUTPUT = ROOT / "build-host-tests" / "device-fixtures"
 
 
 def read_pcap(path: Path):
@@ -116,17 +120,13 @@ def write_stress_pcap(path: Path, linktype: int, snaplen: int, records) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: make_device_fixtures.py INPUT.pcap OUTPUT_DIRECTORY")
-    source = Path(sys.argv[1])
-    output = Path(sys.argv[2])
-    output.mkdir(parents=True, exist_ok=True)
-    linktype, snaplen, nanoseconds, records = read_pcap(source)
-    write_pcapng(output / "upstream_wpa.pcapng", linktype, snaplen, nanoseconds, records)
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    linktype, snaplen, nanoseconds, records = read_pcap(SOURCE)
+    write_pcapng(OUTPUT / "upstream_wpa.pcapng", linktype, snaplen, nanoseconds, records)
     bssid, ssid = find_network(linktype, records)
-    write_ivs2(output / "upstream_wpa.ivs", bssid, ssid)
-    write_stress_pcap(output / "upstream_wpa_stress.cap", linktype, snaplen, records)
-    (output / "upstream_wpa_truncated.cap").write_bytes(source.read_bytes()[:30])
+    write_ivs2(OUTPUT / "upstream_wpa.ivs", bssid, ssid)
+    write_stress_pcap(OUTPUT / "upstream_wpa_stress.cap", linktype, snaplen, records)
+    (OUTPUT / "upstream_wpa_truncated.cap").write_bytes(SOURCE.read_bytes()[:30])
     print(f"Converted {len(records)} genuine packets; IVS2 SSID={ssid.decode('ascii')}")
     return 0
 

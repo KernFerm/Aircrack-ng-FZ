@@ -80,7 +80,11 @@ static void acf_lf_detected(
     protocol_dict_get_data(radio->lf_dict, (size_t)protocol, data, size);
     size_t used = 0;
     for(size_t i = 0; i < size && used + 2 < sizeof(radio->identifier); i++) {
-        used += snprintf(radio->identifier + used, sizeof(radio->identifier) - used, "%02X", data[i]);
+        used += snprintf(
+            radio->identifier + used,
+            sizeof(radio->identifier) - used,
+            "%02X",
+            (unsigned)data[i]);
     }
     radio->events++;
     radio->last_timestamp = furi_hal_rtc_get_timestamp();

@@ -23,7 +23,9 @@ The Sub-GHz RSSI-threshold counter is an activity statistic, not a decoded packe
 
 ## Snyk review
 
-On 2026-09-25, `snyk test --all-projects --json` reported that no supported dependency manifest exists in this native external-app repository. `snyk code test --json` was attempted but the installed CLI requires account authentication, which was not available and was not bypassed. No finding was suppressed. Native review therefore consists of the bounded-parser review above, host compilation with all warnings as errors, malformed-input tests, and the official SDK's compiler/linker/import checks.
+Authenticated Snyk Code analysis on 2026-09-26 initially reported eight low-severity test-tool findings and no production C/FAP, medium, or high findings. Shell-based MSVC discovery was replaced with a fixed-location, argument-vector invocation, and the fixture generator was restricted to fixed repository-contained paths. The authenticated rescan at low-or-higher severity completed with zero issues. No finding was ignored or suppressed.
+
+GitHub CodeQL's 15 high-severity wrong-format-type alerts were remediated by using `<inttypes.h>` fixed-width format macros for `uint32_t` and `uint64_t` values and correct promoted types for hexadecimal byte output. The cache-clean host and official SDK builds pass. Remote alerts close only after the corrected commit is pushed and GitHub reruns code scanning.
 
 ## Vulnerability reporting
 
