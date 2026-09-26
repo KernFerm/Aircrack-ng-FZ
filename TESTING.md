@@ -32,7 +32,7 @@ python -m ufbt
 
 Validated against official SDK 1.4.3, target f7, API 87.1. Compiler and linker diagnostics are treated as errors by the SDK build. The artifact is `dist/aircrack_ng_fz.fap`.
 
-Current release artifact: 41,356 bytes; SHA-256 `9BB5CAEBF911C4FBDAC4FC3F588D46B16B7FB755CC98CB630C945E06D28E0AD5`.
+Current release artifact: 41,356 bytes; SHA-256 `2B18E51D3705863F430900BEB777688F77B893B8D25F0E96F9123325C3CAC986`.
 
 A source-only temporary tree containing only `application.fam` and the six production C/header files was cache-cleaned and fully recompiled on 2026-09-25. All three production C files compiled, linked, passed APPCHK, and generated a genuine FAP, confirming that ignored/generated files are not build inputs.
 

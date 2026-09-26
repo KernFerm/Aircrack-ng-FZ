@@ -28,7 +28,7 @@
 #define ACF_DATA_DIR APP_DATA_PATH("")
 #define ACF_LOG_PATH APP_DATA_PATH("radio_log.csv")
 #define ACF_REPORT_PATH APP_DATA_PATH("report.txt")
-#define ACF_APP_VERSION "1.0.3"
+#define ACF_APP_VERSION "1.0.5"
 
 typedef enum {
     AcfViewMain,

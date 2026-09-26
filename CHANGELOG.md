@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.5 — 2026-09-26
+
+- Added a bounded ACF1 UART transport for an external Raspberry Pi/Linux backend.
+- Added a Flipper controller screen for genuine passive `airodump-ng` capture.
+- Added real capture-derived packet, byte, frame-type, and EAPOL counters.
+- Added configurable external UART baud rate and authorized Wi-Fi channel.
+- Added safe USART/expansion acquisition and release, including failed-start cleanup.
+- Added a Linux companion daemon, systemd example, wiring instructions, and monitor-mode setup guide.
+- Added host tests for the external protocol and Linux capture classifier.
+- Rebuilt for target f7/API 87.1 and rescanned with zero Snyk Code findings.
+
 ## 1.0.3 — 2026-09-26
 
 - Corrected all fixed-width integer formatting reported by GitHub CodeQL.
