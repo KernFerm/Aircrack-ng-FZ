@@ -13,15 +13,15 @@ The host-native C tests compile `acf_parser.c`, `acf_external_protocol.c`, and t
 - known-answer PCAP beacon/SSID/BSSID, short control-frame, ordinary EAPOL, and QoS/HT-control EAPOL classification;
 - known-answer PCAPNG section/interface/enhanced-packet parsing;
 - known-answer IVS2 BSSID/ESSID record parsing;
-- malformed record lengths and truncated input;
+- malformed record lengths, invalid PCAPNG versions/snap lengths, unknown/conflicting IVS2 flags, impossible WPA payloads, binary ESSIDs, and truncated input;
 - cancellation before record processing;
 - 50,000-record/2 MB input with a measured maximum read request of 512 bytes;
 - upstream Aircrack-ng `test/wpa.cap`, copied unchanged to `tests/fixtures/wpa.cap`, with real packet and EAPOL results.
 - exact ACF1 INFO/STATUS parsing, fragmented UART delivery, oversized-line rejection, malformed fields, and 64-bit overflow rejection.
 
-Result on 2026-09-26: all parser tests passed.
+Result on 2026-09-27: all parser tests passed.
 
-The companion's host tests run with `python tests/test_bridge.py` and validate real 802.11/Radiotap frame classification, EAPOL recognition, unsupported-link rejection, and bounded protocol tokens. Result on 2026-09-26: 4/4 passed. `python -m py_compile companion/aircrack_fz_bridge.py` also passed.
+The companion's host tests run with `python tests/test_bridge.py` and validate real 802.11/Radiotap frame classification, EAPOL recognition, unsupported-link rejection, bounded protocol tokens, invalid capture headers, genuine `airodump-ng` stderr propagation with a fixed memory bound, inaccessible capture directories, and failed process shutdown. Result on 2026-09-27: 9/9 passed. `python -m py_compile companion/aircrack_fz_bridge.py` also passed.
 
 ## Firmware build validation
 
@@ -32,7 +32,8 @@ python -m ufbt
 
 Validated against official SDK 1.4.3, target f7, API 87.1. Compiler and linker diagnostics are treated as errors by the SDK build. The artifact is `dist/aircrack_ng_fz.fap`.
 
-Current release artifact: 41,356 bytes; SHA-256 `2B18E51D3705863F430900BEB777688F77B893B8D25F0E96F9123325C3CAC986`.
+The clean v1.0.6 artifact is 44,316 bytes with SHA-256
+`4E843CC7BE7AE501F1025E014779F2C6ADDA347F950A74E33B06CD947D0EB916`.
 
 A source-only temporary tree containing only `application.fam` and the six production C/header files was cache-cleaned and fully recompiled on 2026-09-25. All three production C files compiled, linked, passed APPCHK, and generated a genuine FAP, confirming that ignored/generated files are not build inputs.
 
@@ -75,8 +76,8 @@ These tests require a physical, authorized Flipper Zero and cannot be truthfully
 1. Verify no transmission with a spectrum receiver; the source and imports contain no TX call.
 2. NFC: scan authorized ISO14443-A/B, ISO15693, and FeliCa samples where available; verify only detected protocols appear and removal/re-entry remains responsive.
 3. LF RFID: read authorized tags of multiple supported protocols; compare decoded identifier bytes with the stock RFID app.
-4. Remove the SD card during saved-file parsing; verify a closed error and no crash. Repeat report, logging, and parsing with a full/read-only card. SD removal during report generation and live logging has already passed as recorded above.
-5. With a Raspberry Pi and authorized monitor-mode adapter, verify the ACF1 handshake, real Aircrack-ng/interface display, start/stop behavior, increasing capture-derived counters, saved PCAP path, disconnect recovery, and clean UART/expansion release. This is pending because the hardware is not yet available.
+4. Remove the SD card during saved-file parsing; verify a closed error and no crash. Repeat report, logging, and parsing with a full/read-only card. For v1.0.6, verify a failed report leaves an existing valid report unchanged with no `.partial` file, and verify CSV rotation preserves only the current and previous 1 MiB generations. Earlier SD-removal behavior passed as recorded above, but the new transactional/rotation paths still require device acceptance.
+5. With a Raspberry Pi and authorized monitor-mode adapter, verify the ACF1 handshake, real Aircrack-ng/interface display, start/stop behavior, increasing capture-derived counters, saved PCAP path, disconnect timeout/recovery, surfaced `airodump-ng` failure text, and clean UART/expansion release. This is pending because the hardware is not yet available.
 
 No claim of complete physical tag/protocol coverage should be made until the remaining checklist is executed on authorized hardware and the results are recorded here.
 
@@ -85,7 +86,7 @@ No claim of complete physical tag/protocol coverage should be made until the rem
 - Dependency/repository analysis: not applicable; Snyk detected no supported target manifest.
 - Authenticated Snyk Code analysis on 2026-09-26 initially reported eight low-severity findings in host-only test tooling: two shell-command construction paths and six unrestricted fixture paths. No production C/FAP finding, medium finding, or high finding was reported.
 - The test runner now invokes a compiler from fixed standard Visual Studio locations without a shell, and the fixture generator now uses fixed repository-contained input/output paths.
-- The authenticated rescan with `snyk code test --severity-threshold=low --remote-repo-url=https://github.com/KernFerm/Aircrack-ng-FZ` completed with `Total issues: 0` and exit code 0. No finding was ignored or suppressed.
+- The authenticated v1.0.6 rescan on 2026-09-27 with `snyk code test --severity-threshold=low --remote-repo-url=https://github.com/KernFerm/Aircrack-ng-FZ` completed with `Total issues: 0` and exit code 0. No finding was ignored or suppressed.
 
 ## CodeQL formatting remediation
 

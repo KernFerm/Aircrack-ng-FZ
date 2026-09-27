@@ -1,8 +1,8 @@
 # Aircrack-ng FZ
 
-Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.5 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
+Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.6 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
 
-Current release: **v1.0.5**.
+Current release: **v1.0.6**.
 
 ## Install the FAP
 
@@ -42,7 +42,7 @@ The result contains only values actually parsed from the selected file: format, 
 3. The screen shows the CC1101's calibrated receive frequency, live RSSI, threshold-crossing event count, last-event timestamp, and signal history.
 4. Press **Back** to stop and release the radio.
 
-This is a receive-only activity analyzer. An event is an RSSI threshold crossing, not a decoded Sub-GHz packet and not Wi-Fi traffic. When logging is enabled, genuine measurements are written to `/ext/apps_data/aircrack_ng_fz/radio_log.csv`. `LOG ERROR: check SD` means the app could not write the current record and will retry.
+This is a receive-only activity analyzer. An event is an RSSI threshold crossing, not a decoded Sub-GHz packet and not Wi-Fi traffic. When logging is enabled, genuine measurements are synchronized to `/ext/apps_data/aircrack_ng_fz/radio_log.csv`. At 1 MiB the current file rotates to `radio_log.previous.csv`, bounding log storage to approximately 2 MiB. `LOG ERROR: check SD` means the app could not write and synchronize the current record and will retry.
 
 ### NFC and LF RFID analyzers
 
@@ -67,8 +67,9 @@ The complete unmodified Aircrack-ng command-line suite remains available directl
 ### Saved files, reports, and diagnostics
 
 - **Saved Files** opens existing `.nfc`, `.rfid`, and `.sub` files read-only through the official format loaders.
-- **Reports** writes measured/parser session results to `/ext/apps_data/aircrack_ng_fz/report.txt`.
+- **Reports** transactionally writes measured/parser session results to `/ext/apps_data/aircrack_ng_fz/report.txt`. A write, synchronization, or rename failure preserves the previous valid report.
 - **Session Statistics** shows counters for the current app session. They reset when the app closes; saved reports and CSV logs remain.
+- **Settings > About** opens a scrollable on-device explanation of native analysis, receive-only radios, optional Raspberry Pi/Linux Wi-Fi support, safety boundaries, license, and installed version.
 - **Resource Self-Test** performs 25 real start/stop cycles for each radio backend. It can be cancelled with **Back** and does not transmit.
 
 ## What the app does not do

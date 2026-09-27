@@ -147,6 +147,44 @@ static void test_malformed_truncated_cancelled(void) {
     assert(analyze(capture, sizeof(capture), true, &result, NULL) == AcfStatusCancelled);
 }
 
+static void test_strict_container_validation(void) {
+    AcfAnalysis result;
+    const unsigned char tiny[] = {0xd4, 0xc3, 0xb2};
+    assert(analyze(tiny, sizeof(tiny), false, &result, NULL) == AcfStatusMalformed);
+
+    const unsigned char unknown_ivs[] = {
+        0xae, 0x78, 0xd1, 0xff, 1, 0,
+        0x40, 0, 0, 0};
+    assert(analyze(unknown_ivs, sizeof(unknown_ivs), false, &result, NULL) == AcfStatusMalformed);
+
+    const unsigned char short_wpa[] = {
+        0xae, 0x78, 0xd1, 0xff, 1, 0,
+        4, 0, 1, 0, 0};
+    assert(analyze(short_wpa, sizeof(short_wpa), false, &result, NULL) == AcfStatusMalformed);
+
+    const unsigned char binary_ssid[] = {
+        0xae, 0x78, 0xd1, 0xff, 1, 0,
+        2, 0, 1, 0, 0x1b};
+    assert(analyze(binary_ssid, sizeof(binary_ssid), false, &result, NULL) == AcfStatusOk);
+    assert(result.first_ssid[0] == '\0');
+
+    unsigned char pcapng[48] = {0};
+    put32(pcapng, 0x0a0d0d0a);
+    put32(pcapng + 4, 28);
+    put32(pcapng + 8, 0x1a2b3c4d);
+    put16(pcapng + 12, 2);
+    put32(pcapng + 24, 28);
+    assert(analyze(pcapng, 28, false, &result, NULL) == AcfStatusUnsupported);
+
+    put16(pcapng + 12, 1);
+    put32(pcapng + 28, 1);
+    put32(pcapng + 32, 20);
+    put16(pcapng + 36, 105);
+    put32(pcapng + 40, 0);
+    put32(pcapng + 44, 20);
+    assert(analyze(pcapng, sizeof(pcapng), false, &result, NULL) == AcfStatusMalformed);
+}
+
 static void test_large_stream_is_bounded(void) {
     const size_t records = 50000;
     const size_t size = 24 + records * 40;
@@ -194,7 +232,7 @@ static void receive_external(const AcfExternalMessage* message, void* context) {
 static void test_external_protocol(void) {
     AcfExternalMessage message;
     assert(acf_external_parse_line(
-        "ACF1 INFO 1 1.0.5 1.7 wlan1mon /var/lib/aircrack-fz/captures/a.cap",
+        "ACF1 INFO 1 1.0.6 1.7 wlan1mon /var/lib/aircrack-fz/captures/a.cap",
         &message));
     assert(message.type == AcfExternalMessageInfo);
     assert(message.protocol_version == 1);
@@ -213,7 +251,7 @@ static void test_external_protocol(void) {
     AcfExternalDecoder decoder;
     acf_external_decoder_reset(&decoder);
     MessageSink sink = {0};
-    const unsigned char first[] = "ACF1 INFO 1 1.0.5 1.7 ";
+    const unsigned char first[] = "ACF1 INFO 1 1.0.6 1.7 ";
     const unsigned char second[] = "wlan1mon /captures/a.cap\r\n";
     acf_external_decoder_feed(&decoder, first, sizeof(first) - 1, receive_external, &sink);
     assert(sink.count == 0);
@@ -232,6 +270,7 @@ int main(int argc, char** argv) {
     test_ivs2_known_answer();
     test_pcapng_known_answer();
     test_malformed_truncated_cancelled();
+    test_strict_container_validation();
     test_large_stream_is_bounded();
     test_external_protocol();
     for(int i = 1; i < argc; i++) test_external_fixture(argv[i], i == 1);

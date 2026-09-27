@@ -41,7 +41,9 @@ Not portable to stock Flipper Zero:
 
 ## Adaptation details
 
-`acf_parser.c` preserves Aircrack-ng's PCAP link-type values, IVS2 magic/version, flag meanings, and packed on-disk semantics without importing host ABI structs. Every multibyte field is decoded explicitly, avoiding alignment and host-endian assumptions. Records are streamed through an abstract reader. Packet storage is capped at a 512-byte inspection prefix; record lengths are bounded at 16 MiB and checked against snap length, original length, block length, current position, and total file size.
+`acf_parser.c` preserves Aircrack-ng's PCAP link-type values, IVS2 magic/version, flag meanings, and packed on-disk semantics without importing host ABI structs. Every multibyte field is decoded explicitly, avoiding alignment and host-endian assumptions. Records are streamed through an abstract reader. Packet storage is capped at a 512-byte inspection prefix; record lengths are bounded at 16 MiB and checked against snap length, original length, block length, current position, and total file size. PCAPNG section versions, interface limits, interface snap lengths, block trailers, and packet lengths fail closed. IVS2 rejects unknown/conflicting flags and impossible ESSID/WPA payload lengths; non-printable ESSIDs are retained as absent rather than inserted into formatted UI text.
+
+The optional Linux companion runs genuine `airodump-ng` and validates the growing classic-PCAP container before deriving counters. Capture prefixes include UTC microseconds plus collision fallback. A failed previous process/reader is stopped before reuse, process stderr is continuously drained into a fixed 4 KiB memory tail, and directory, reader, exit, and shutdown failures are returned through the fixed ACF1 error message rather than converted into successful measurements.
 
 The hardware additions in `acf_radio.c` are not upstream Aircrack-ng backends. They are separate Flipper-specific modes using public firmware 1.4.3 APIs:
 
@@ -53,4 +55,4 @@ The hardware additions in `acf_radio.c` are not upstream Aircrack-ng backends. T
 
 Offline and saved-file work runs on a 3072-byte worker stack. The GUI only changes views and renders completed results. A volatile cancellation flag is checked for every record/block. Back requests cancellation, and teardown joins the worker before freeing storage or GUI state.
 
-NFC and LF use SDK-owned worker/event execution. Sub-GHz follows firmware 1.4.3's `rx_carrier` sequence and samples hardware RSSI; hysteretic threshold crossings produce activity timestamps and a fixed 64-byte history. Logging runs on a separate bounded worker, never the GUI thread. No unbounded capture, packet, AP, station, wordlist, or log buffer exists.
+NFC and LF use SDK-owned worker/event execution. Sub-GHz follows firmware 1.4.3's `rx_carrier` sequence and samples hardware RSSI; hysteretic threshold crossings produce activity timestamps and a fixed 64-byte history. Logging runs on a separate bounded worker, never the GUI thread. Each accepted CSV record is synchronized; the file rotates at 1 MiB with one previous generation. Reports use synchronized transactional replacement with recovery of the prior valid file. No unbounded capture, packet, AP, station, wordlist, memory log buffer, or device CSV file exists.

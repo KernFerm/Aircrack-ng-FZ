@@ -3,8 +3,8 @@
 | Feature | Status | Evidence/boundary |
 |---|---|---|
 | Classic PCAP/CAP | Supported | LE/BE microsecond and nanosecond magic; v2.4; 802.11, Prism, Radiotap, PPI link types |
-| PCAPNG | Supported subset | Section Header, Interface Description, Enhanced Packet blocks; per-section endianness; up to 8 interfaces |
-| Aircrack IVS2 | Supported | Version 1 record validation, BSSID/ESSID metadata, WPA-record counts |
+| PCAPNG | Supported subset | Section version, interface snap length, Enhanced Packet length, alignment, and trailer validation; per-section endianness; up to 8 interfaces |
+| Aircrack IVS2 | Supported | Version 1 known-flag and payload-length validation, BSSID/printable ESSID metadata, structurally sized WPA-record counts |
 | 802.11 frame summary | Supported offline only | Management/control/data/protected counts from supplied bytes |
 | SSID/BSSID | Supported offline only | First valid beacon/probe-response values; never synthesized |
 | EAPOL identification | Supported offline only | LLC/SNAP EtherType `0x888e`; not claimed as a complete/valid handshake |
@@ -13,7 +13,7 @@
 | Capture decryption | Not implemented | No keys are accepted or produced |
 | Wordlists | Not implemented | Avoids presenting unusable CPU/memory-heavy cracking |
 | Live Wi-Fi on stock Flipper | Impossible on stock hardware | No general-purpose 802.11 chipset |
-| External passive Wi-Fi capture | Implemented; hardware validation pending | Genuine `airodump-ng` on Linux/Pi with monitor-mode adapter; fixed UART controller protocol; real capture-derived counters |
+| External passive Wi-Fi capture | Implemented; hardware validation pending | Genuine `airodump-ng` on Linux/Pi with monitor-mode adapter; fixed UART controller protocol; validated growing PCAP and bounded backend errors |
 | External arbitrary Aircrack shell/injection | Not exposed by Flipper | Full CLI remains on Linux; bridge deliberately has no arbitrary command, replay, deauthentication, or jamming control |
 | Live Sub-GHz | Supported | Internal CC1101 RX, real RSSI, hysteretic activity crossings, hardware frequency, time, history; no TX |
 | Live NFC | Supported detection | Actual stock NFC scan and protocol identification; scanner API does not expose raw frames or UID |
@@ -21,8 +21,8 @@
 | Live LF RFID | Supported | Actual stock LF worker; protocol and decoder data bytes |
 | Saved LF RFID | Supported | Official dictionary file loader and decoder |
 | Saved Sub-GHz | Supported | Official FlipperFormat header/frequency/protocol validation; read-only |
-| Logging | Supported | Optional CSV of actual hardware values/events; off by default |
-| Reports | Supported | Timestamped local summary, no inferred results |
+| Logging | Supported | Optional synchronized CSV of actual hardware values/events; off by default; 1 MiB current/previous rotation |
+| Reports | Supported | Transactional synchronized local summary; previous valid report survives failure; no inferred results |
 | Cancellation | Supported | Per-record/block cooperative cancellation and joined worker |
 | Resource lifecycle test | Supported | Cancellable worker performs 25 real acquire/release cycles for Sub-GHz, NFC, and LF RFID |
 

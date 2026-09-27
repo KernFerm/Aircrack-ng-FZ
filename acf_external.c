@@ -48,7 +48,7 @@ static void acf_external_message(const AcfExternalMessage* message, void* contex
     AcfExternal* external = context;
     furi_mutex_acquire(external->data_mutex, FuriWaitForever);
     AcfExternalSnapshot* snapshot = &external->snapshot;
-    snapshot->last_update = furi_hal_rtc_get_timestamp();
+    snapshot->last_update = furi_get_tick();
     if(message->type == AcfExternalMessageInfo) {
         snapshot->protocol_version = message->protocol_version;
         if(message->protocol_version == ACF_EXTERNAL_PROTOCOL_VERSION) {
@@ -75,6 +75,7 @@ static void acf_external_message(const AcfExternalMessage* message, void* contex
         snapshot->dropped = message->dropped;
     } else if(message->type == AcfExternalMessageError) {
         snprintf(snapshot->error, sizeof(snapshot->error), "%s", message->error);
+        snprintf(snapshot->state, sizeof(snapshot->state), "ERROR");
         snapshot->capturing = false;
     }
     furi_mutex_release(external->data_mutex);
@@ -107,6 +108,18 @@ static int32_t acf_external_worker(void* context) {
             1000);
         if(flags & FuriFlagError) {
             if(flags == (uint32_t)FuriFlagErrorTimeout) {
+                bool request_hello = false;
+                furi_mutex_acquire(external->data_mutex, FuriWaitForever);
+                if(external->snapshot.connected &&
+                   furi_get_tick() - external->snapshot.last_update > furi_ms_to_ticks(5000)) {
+                    external->snapshot.connected = false;
+                    external->snapshot.capturing = false;
+                    snprintf(external->snapshot.state, sizeof(external->snapshot.state), "DISCONNECTED");
+                    snprintf(external->snapshot.error, sizeof(external->snapshot.error), "Bridge timeout");
+                }
+                request_hello = !external->snapshot.connected;
+                furi_mutex_release(external->data_mutex);
+                if(request_hello) acf_external_send(external, "ACF1 HELLO\n");
                 acf_external_send(external, "ACF1 STATUS\n");
             } else {
                 acf_external_set_error(external, "UART worker failure");
@@ -178,9 +191,9 @@ bool acf_external_start(AcfExternal* external, uint32_t baudrate) {
         acf_external_stop(external);
         return false;
     }
+    furi_hal_serial_init(external->serial, baudrate);
     furi_thread_start(external->worker);
     external->worker_started = true;
-    furi_hal_serial_init(external->serial, baudrate);
     furi_hal_serial_async_rx_start(external->serial, acf_external_irq, external, true);
     acf_external_send(external, "ACF1 HELLO\n");
     acf_external_send(external, "ACF1 STATUS\n");

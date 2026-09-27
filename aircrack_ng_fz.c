@@ -27,8 +27,12 @@
 
 #define ACF_DATA_DIR APP_DATA_PATH("")
 #define ACF_LOG_PATH APP_DATA_PATH("radio_log.csv")
+#define ACF_LOG_BACKUP APP_DATA_PATH("radio_log.previous.csv")
+#define ACF_LOG_MAX_BYTES (1024U * 1024U)
 #define ACF_REPORT_PATH APP_DATA_PATH("report.txt")
-#define ACF_APP_VERSION "1.0.5"
+#define ACF_REPORT_PARTIAL APP_DATA_PATH("report.txt.partial")
+#define ACF_REPORT_BACKUP APP_DATA_PATH("report.txt.backup")
+#define ACF_APP_VERSION "1.0.6"
 
 typedef enum {
     AcfViewMain,
@@ -54,6 +58,16 @@ typedef enum {
     AcfMenuResourceTest,
     AcfMenuSettings,
 } AcfMainItem;
+
+typedef enum {
+    AcfSettingFrequency,
+    AcfSettingLogging,
+    AcfSettingExternalBaud,
+    AcfSettingExternalChannel,
+    AcfSettingVersion,
+    AcfSettingProtocol,
+    AcfSettingAbout,
+} AcfSettingItem;
 
 typedef enum {
     AcfTaskCapture,
@@ -92,6 +106,7 @@ typedef struct {
     AcfTask task;
     AcfViewId current_view;
     AcfViewId browser_return;
+    AcfViewId text_return;
     AcfRadio* radio;
     AcfExternal* external;
     uint32_t external_baud;
@@ -136,11 +151,20 @@ static void acf_switch(AcfApp* app, AcfViewId view) {
     view_dispatcher_switch_to_view(app->dispatcher, view);
 }
 
-static void acf_set_text(AcfApp* app, const char* title, const char* body) {
+static void acf_set_text_return(
+    AcfApp* app,
+    const char* title,
+    const char* body,
+    AcfViewId return_view) {
     widget_reset(app->widget);
     furi_string_printf(app->text, "\e#%s\n%s", title, body);
     widget_add_text_scroll_element(app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));
+    app->text_return = return_view;
     acf_switch(app, AcfViewText);
+}
+
+static void acf_set_text(AcfApp* app, const char* title, const char* body) {
+    acf_set_text_return(app, title, body, AcfViewMain);
 }
 
 static size_t acf_storage_read(void* context, void* data, size_t size) {
@@ -189,7 +213,8 @@ static AcfStatus acf_load_saved_lf(AcfApp* app) {
     ProtocolDict* dict = protocol_dict_alloc(lfrfid_protocols, LFRFIDProtocolMax);
     if(!dict) return AcfStatusIo;
     ProtocolId protocol = lfrfid_dict_file_load(dict, furi_string_get_cstr(app->path));
-    if(protocol >= 0 && protocol < LFRFIDProtocolMax) {
+    bool valid = protocol >= 0 && protocol < LFRFIDProtocolMax;
+    if(valid) {
         size_t size = protocol_dict_get_data_size(dict, (size_t)protocol);
         uint8_t data[32];
         if(size > sizeof(data)) size = sizeof(data);
@@ -204,7 +229,7 @@ static AcfStatus acf_load_saved_lf(AcfApp* app) {
             id);
     }
     protocol_dict_free(dict);
-    return protocol >= 0 ? AcfStatusOk : AcfStatusMalformed;
+    return valid ? AcfStatusOk : AcfStatusMalformed;
 }
 
 static AcfStatus acf_load_saved_sub(AcfApp* app) {
@@ -403,6 +428,7 @@ static void acf_browser_selected(void* context) {
     widget_reset(app->widget);
     furi_string_set_str(app->text, "\e#Analyzing...\nBack requests cancellation.");
     widget_add_text_scroll_element(app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));
+    app->text_return = AcfViewMain;
     acf_switch(app, AcfViewText);
     app->worker = furi_thread_alloc_ex("AcfAnalyze", 3072, acf_analysis_worker, app);
     if(app->worker) {
@@ -424,6 +450,7 @@ static void acf_start_resource_test(AcfApp* app) {
         "\e#Resource Self-Test\nCycle 0/25\nSub-GHz + NFC + LF RFID\n\nBack cancels safely.");
     widget_add_text_scroll_element(
         app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));
+    app->text_return = AcfViewMain;
     acf_switch(app, AcfViewText);
     app->worker = furi_thread_alloc_ex("AcfHwTest", 3072, acf_analysis_worker, app);
     if(app->worker) {
@@ -461,10 +488,24 @@ static void acf_log_radio(AcfApp* app) {
     acf_radio_snapshot(app->radio, &snapshot);
     if(!app->logging || !snapshot.running) return;
     if(snapshot.events == app->last_logged_events && snapshot.mode != AcfRadioSubGhz) return;
-    storage_common_mkdir(app->storage, ACF_DATA_DIR);
+    if(!storage_simply_mkdir(app->storage, ACF_DATA_DIR)) {
+        acf_radio_set_log_error(app->radio, true);
+        return;
+    }
     File* file = storage_file_alloc(app->storage);
     bool ok = false;
     if(file && storage_file_open(file, ACF_LOG_PATH, FSAM_WRITE, FSOM_OPEN_APPEND)) {
+        if(storage_file_size(file) >= ACF_LOG_MAX_BYTES) {
+            storage_file_close(file);
+            storage_common_remove(app->storage, ACF_LOG_BACKUP);
+            if(storage_common_rename(app->storage, ACF_LOG_PATH, ACF_LOG_BACKUP) != FSE_OK ||
+               !storage_file_open(file, ACF_LOG_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+                if(storage_file_is_open(file)) storage_file_close(file);
+                storage_file_free(file);
+                acf_radio_set_log_error(app->radio, true);
+                return;
+            }
+        }
         char line[160];
         int length = snprintf(
             line,
@@ -478,7 +519,8 @@ static void acf_log_radio(AcfApp* app) {
             snapshot.events,
             snapshot.identifier);
         if(length > 0 && (size_t)length < sizeof(line)) {
-            ok = storage_file_write(file, line, (size_t)length) == (size_t)length;
+            ok = storage_file_write(file, line, (size_t)length) == (size_t)length &&
+                 storage_file_sync(file);
         }
         storage_file_close(file);
     }
@@ -586,6 +628,10 @@ static void acf_external_draw(Canvas* canvas, void* model_context) {
     char line[80];
     if(!snapshot.active) {
         canvas_draw_str(canvas, 2, 25, "UART is not active");
+        if(snapshot.error[0]) {
+            snprintf(line, sizeof(line), "Error: %.18s", snapshot.error);
+            canvas_draw_str(canvas, 2, 39, line);
+        }
     } else if(!snapshot.connected) {
         snprintf(line, sizeof(line), "Waiting for Pi @ %" PRIu32, model->app->external_baud);
         canvas_draw_str(canvas, 2, 23, line);
@@ -631,16 +677,26 @@ static void acf_start_external(AcfApp* app) {
 }
 
 static void acf_write_report(AcfApp* app) {
-    storage_common_mkdir(app->storage, ACF_DATA_DIR);
-    File* file = storage_file_alloc(app->storage);
-    bool ok = file && storage_file_open(file, ACF_REPORT_PATH, FSAM_WRITE, FSOM_CREATE_ALWAYS);
+    bool ready = storage_simply_mkdir(app->storage, ACF_DATA_DIR);
+    if(storage_file_exists(app->storage, ACF_REPORT_BACKUP)) {
+        if(!storage_file_exists(app->storage, ACF_REPORT_PATH)) {
+            if(storage_common_rename(app->storage, ACF_REPORT_BACKUP, ACF_REPORT_PATH) != FSE_OK)
+                ready = false;
+        } else {
+            storage_common_remove(app->storage, ACF_REPORT_BACKUP);
+            if(storage_file_exists(app->storage, ACF_REPORT_BACKUP)) ready = false;
+        }
+    }
+    storage_common_remove(app->storage, ACF_REPORT_PARTIAL);
+    if(storage_file_exists(app->storage, ACF_REPORT_PARTIAL)) ready = false;
+    File* file = ready ? storage_file_alloc(app->storage) : NULL;
+    bool ok = file &&
+              storage_file_open(file, ACF_REPORT_PARTIAL, FSAM_WRITE, FSOM_CREATE_ALWAYS);
     if(ok) {
         AcfExternalSnapshot external;
         acf_external_snapshot(app->external, &external);
-        char report[768];
-        int len = snprintf(
-            report,
-            sizeof(report),
+        furi_string_printf(
+            app->text,
             "Aircrack-ng FZ report\nGenerated: %" PRIu32 "\nFiles analyzed: %" PRIu32
             "\nMalformed files: %" PRIu32 "\nRadio events: %" PRIu32
             "\nLast capture format: %s\nLast packet count: %" PRIu32
@@ -665,11 +721,27 @@ static void acf_write_report(AcfApp* app) {
             external.packets,
             external.eapol,
             external.capture_path[0] ? external.capture_path : "not reported");
-        ok = len > 0 && (size_t)len < sizeof(report) &&
-             storage_file_write(file, report, (size_t)len) == (size_t)len;
+        const char* report = furi_string_get_cstr(app->text);
+        size_t length = furi_string_size(app->text);
+        ok = storage_file_write(file, report, length) == length && storage_file_sync(file);
         storage_file_close(file);
     }
     if(file) storage_file_free(file);
+    if(ok) {
+        bool had_report = storage_file_exists(app->storage, ACF_REPORT_PATH);
+        if(had_report &&
+           storage_common_rename(app->storage, ACF_REPORT_PATH, ACF_REPORT_BACKUP) != FSE_OK) {
+            ok = false;
+        } else if(
+            storage_common_rename(app->storage, ACF_REPORT_PARTIAL, ACF_REPORT_PATH) != FSE_OK) {
+            if(had_report)
+                storage_common_rename(app->storage, ACF_REPORT_BACKUP, ACF_REPORT_PATH);
+            ok = false;
+        } else if(had_report) {
+            storage_common_remove(app->storage, ACF_REPORT_BACKUP);
+        }
+    }
+    if(!ok) storage_common_remove(app->storage, ACF_REPORT_PARTIAL);
     acf_set_text(
         app,
         ok ? "Report saved" : "Report failed",
@@ -757,6 +829,22 @@ static void acf_external_channel_changed(VariableItem* item) {
     variable_item_set_current_value_text(item, acf_external_channel_names[app->external_channel_index]);
 }
 
+static void acf_settings_enter(void* context, uint32_t index) {
+    AcfApp* app = context;
+    if(index != AcfSettingAbout) return;
+    acf_set_text_return(
+        app,
+        "About Aircrack-ng FZ",
+        "Version " ACF_APP_VERSION
+        "\n\nAircrack-ng FZ performs real, read-only analysis of PCAP, PCAPNG, CAP and IVS2 capture files stored on the Flipper microSD card."
+        "\n\nThe stock Flipper has no Wi-Fi radio. Its native Sub-GHz, NFC and LF RFID screens only display genuine receive/detection measurements from their own hardware; they are never presented as Wi-Fi results."
+        "\n\nExternal Wi-Fi: run the included companion and genuine Aircrack-ng/airodump-ng on a Raspberry Pi or other Linux computer with a compatible monitor-mode Wi-Fi adapter. Connect crossed 3.3V UART TX/RX and GND, select the same baud and an authorized channel, then open External Aircrack-ng."
+        "\n\nThe Linux computer performs passive Wi-Fi capture while the Flipper controls start/stop and displays real capture-derived counters. Full Aircrack-ng CLI features remain on Linux."
+        "\n\nNo injection, deauthentication, replay, jamming, invented handshakes or simulated results. Use only on files, radios and networks you are authorized to inspect."
+        "\n\nLicense: GNU GPL v3",
+        AcfViewSettings);
+}
+
 static bool acf_custom_event(void* context, uint32_t event) {
     AcfApp* app = context;
     if(event == AcfEventAnalysisDone) {
@@ -774,7 +862,10 @@ static bool acf_back(void* context) {
     } else if(app->current_view == AcfViewRadio) {
         AcfRadioSnapshot snapshot;
         acf_radio_snapshot(app->radio, &snapshot);
-        app->total_radio_events += snapshot.events;
+        if(UINT32_MAX - app->total_radio_events < snapshot.events)
+            app->total_radio_events = UINT32_MAX;
+        else
+            app->total_radio_events += snapshot.events;
         acf_radio_stop(app->radio);
         acf_switch(app, AcfViewMain);
     } else if(app->current_view == AcfViewExternal) {
@@ -791,6 +882,8 @@ static bool acf_back(void* context) {
         furi_string_set_str(app->text, "\e#Cancelling...\nWaiting for the bounded parser to release the file.");
         widget_reset(app->widget);
         widget_add_text_scroll_element(app->widget, 0, 0, 128, 64, furi_string_get_cstr(app->text));
+    } else if(app->current_view == AcfViewText) {
+        acf_switch(app, app->text_return);
     } else {
         acf_switch(app, AcfViewMain);
     }
@@ -951,6 +1044,9 @@ static AcfApp* acf_app_alloc(void) {
     variable_item_set_current_value_text(version, ACF_APP_VERSION);
     VariableItem* protocol = variable_item_list_add(app->settings, "External protocol", 1, NULL, app);
     variable_item_set_current_value_text(protocol, "ACF1");
+    VariableItem* about = variable_item_list_add(app->settings, "About", 1, NULL, app);
+    variable_item_set_current_value_text(about, "Open");
+    variable_item_list_set_enter_callback(app->settings, acf_settings_enter, app);
 
     view_dispatcher_set_event_callback_context(app->dispatcher, app);
     view_dispatcher_set_navigation_event_callback(app->dispatcher, acf_back);

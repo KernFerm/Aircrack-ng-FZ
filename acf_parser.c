@@ -12,6 +12,11 @@
 #define ACF_IVS2_BSSID 0x0001U
 #define ACF_IVS2_ESSID 0x0002U
 #define ACF_IVS2_WPA 0x0004U
+#define ACF_IVS2_XOR 0x0008U
+#define ACF_IVS2_PTW 0x0010U
+#define ACF_IVS2_CLR 0x0020U
+#define ACF_IVS2_KNOWN_FLAGS 0x003FU
+#define ACF_IVS2_WPA_SIZE 392U
 
 static uint16_t acf_u16(const uint8_t* p, bool be) {
     return be ? ((uint16_t)p[0] << 8) | p[1] : ((uint16_t)p[1] << 8) | p[0];
@@ -109,6 +114,7 @@ static void acf_parse_80211(const uint8_t* packet, size_t size, uint32_t link, A
 
 static AcfStatus acf_parse_pcap(AcfReader* r, volatile bool* cancel, AcfAnalysis* out) {
     uint8_t header[24];
+    if(r->size(r->context) < sizeof(header)) return AcfStatusMalformed;
     if(!r->seek(r->context, 0) || !acf_read_exact(r, header, sizeof(header))) return AcfStatusIo;
     bool be;
     if((header[0] == 0xd4 && header[1] == 0xc3 && header[2] == 0xb2 && header[3] == 0xa1) ||
@@ -153,6 +159,7 @@ static AcfStatus acf_parse_pcap(AcfReader* r, volatile bool* cancel, AcfAnalysis
 
 static AcfStatus acf_parse_ivs2(AcfReader* r, volatile bool* cancel, AcfAnalysis* out) {
     uint8_t file_header[6];
+    if(r->size(r->context) < sizeof(file_header)) return AcfStatusMalformed;
     if(!r->seek(r->context, 0) || !acf_read_exact(r, file_header, sizeof(file_header)))
         return AcfStatusIo;
     if(acf_u16(file_header + 4, false) > 1) return AcfStatusUnsupported;
@@ -166,7 +173,22 @@ static AcfStatus acf_parse_ivs2(AcfReader* r, volatile bool* cancel, AcfAnalysis
             return AcfStatusMalformed;
         uint16_t flags = acf_u16(header, false);
         uint16_t length = acf_u16(header + 2, false);
+        uint16_t primary = flags & (ACF_IVS2_ESSID | ACF_IVS2_WPA | ACF_IVS2_XOR |
+                                    ACF_IVS2_PTW | ACF_IVS2_CLR);
+        if(!flags || (flags & ~ACF_IVS2_KNOWN_FLAGS) || (primary && (primary & (primary - 1U))))
+            return AcfStatusMalformed;
         if(length > file_size - r->tell(r->context)) return AcfStatusMalformed;
+        size_t payload_length = length;
+        if(flags & ACF_IVS2_BSSID) {
+            if(payload_length < 6U) return AcfStatusMalformed;
+            payload_length -= 6U;
+        }
+        if((primary == 0 && payload_length != 0) ||
+           (primary == ACF_IVS2_ESSID && (payload_length == 0 || payload_length > 32U)) ||
+           (primary == ACF_IVS2_WPA && payload_length != ACF_IVS2_WPA_SIZE) ||
+           (primary == ACF_IVS2_XOR && payload_length < 4U) ||
+           ((primary == ACF_IVS2_PTW || primary == ACF_IVS2_CLR) && payload_length == 0))
+            return AcfStatusMalformed;
         size_t take = length < sizeof(prefix) ? length : sizeof(prefix);
         if(!acf_read_exact(r, prefix, take)) return AcfStatusIo;
         if(length > take && !acf_skip(r, length - (uint32_t)take)) return AcfStatusIo;
@@ -181,8 +203,14 @@ static AcfStatus acf_parse_ivs2(AcfReader* r, volatile bool* cancel, AcfAnalysis
         if((flags & ACF_IVS2_ESSID) && pos < take && out->first_ssid[0] == '\0') {
             size_t len = take - pos;
             if(len > 32) len = 32;
-            memcpy(out->first_ssid, prefix + pos, len);
-            out->first_ssid[len] = '\0';
+            bool printable = true;
+            for(size_t i = 0; i < len; i++) {
+                if(prefix[pos + i] < 0x20 || prefix[pos + i] > 0x7e) printable = false;
+            }
+            if(printable) {
+                memcpy(out->first_ssid, prefix + pos, len);
+                out->first_ssid[len] = '\0';
+            }
         }
     }
     return AcfStatusOk;
@@ -190,6 +218,7 @@ static AcfStatus acf_parse_ivs2(AcfReader* r, volatile bool* cancel, AcfAnalysis
 
 static AcfStatus acf_parse_pcapng(AcfReader* r, volatile bool* cancel, AcfAnalysis* out) {
     uint8_t header[12];
+    if(r->size(r->context) < sizeof(header)) return AcfStatusMalformed;
     if(!r->seek(r->context, 0) || !acf_read_exact(r, header, sizeof(header))) return AcfStatusIo;
     bool be;
     if(header[8] == 0x4d && header[9] == 0x3c && header[10] == 0x2b && header[11] == 0x1a)
@@ -201,6 +230,7 @@ static AcfStatus acf_parse_pcapng(AcfReader* r, volatile bool* cancel, AcfAnalys
     if(!r->seek(r->context, 0)) return AcfStatusIo;
     const uint64_t file_size = r->size(r->context);
     uint32_t interface_links[8] = {0};
+    uint32_t interface_snaplens[8] = {0};
     uint8_t interface_count = 0;
     uint8_t block_header[8];
     uint8_t packet[ACF_PACKET_PREFIX];
@@ -230,12 +260,23 @@ static AcfStatus acf_parse_pcapng(AcfReader* r, volatile bool* cancel, AcfAnalys
            length > file_size - block_start)
             return AcfStatusMalformed;
         if(type == 0x0A0D0D0AU) {
+            uint8_t version[4];
+            if(length < 28U) return AcfStatusMalformed;
+            if(!acf_read_exact(r, version, sizeof(version))) return AcfStatusIo;
+            if(acf_u16(version, be) != 1U || acf_u16(version + 2, be) != 0U)
+                return AcfStatusUnsupported;
             interface_count = 0;
         } else if(type == 1U && length >= 20) {
             uint8_t body[8];
             if(!acf_read_exact(r, body, sizeof(body))) return AcfStatusIo;
             uint32_t link = acf_u16(body, be);
-            if(interface_count < 8) interface_links[interface_count++] = link;
+            uint32_t snaplen = acf_u32(body + 4, be);
+            if(body[2] || body[3] || !snaplen || snaplen > ACF_MAX_CAPTURE_RECORD)
+                return AcfStatusMalformed;
+            if(!acf_supported_link(link)) return AcfStatusUnsupported;
+            if(interface_count >= 8) return AcfStatusUnsupported;
+            interface_links[interface_count] = link;
+            interface_snaplens[interface_count++] = snaplen;
         } else if(type == 6U && length >= 32) {
             uint8_t body[20];
             if(!acf_read_exact(r, body, sizeof(body))) return AcfStatusIo;
@@ -243,6 +284,7 @@ static AcfStatus acf_parse_pcapng(AcfReader* r, volatile bool* cancel, AcfAnalys
             uint32_t captured = acf_u32(body + 12, be);
             uint32_t original = acf_u32(body + 16, be);
             if(interface_id >= interface_count || captured > original ||
+               captured > interface_snaplens[interface_id] ||
                captured > length - 32U)
                 return AcfStatusMalformed;
             uint32_t link = interface_links[interface_id];
@@ -270,8 +312,8 @@ AcfStatus acf_analyze(AcfReader* reader, volatile bool* cancel, AcfAnalysis* res
         return AcfStatusMalformed;
     memset(result, 0, sizeof(*result));
     uint8_t magic[4];
-    if(reader->size(reader->context) < 4 || !reader->seek(reader->context, 0) ||
-       !acf_read_exact(reader, magic, sizeof(magic)))
+    if(reader->size(reader->context) < 4) return AcfStatusMalformed;
+    if(!reader->seek(reader->context, 0) || !acf_read_exact(reader, magic, sizeof(magic)))
         return AcfStatusIo;
     if(magic[0] == 0xae && magic[1] == 0x78 && magic[2] == 0xd1 && magic[3] == 0xff) {
         result->format = AcfFormatIvs2;

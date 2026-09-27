@@ -7,7 +7,7 @@ The companion makes live Wi-Fi possible by running genuine Aircrack-ng on a Rasp
 - Raspberry Pi or Linux computer
 - Dedicated USB Wi-Fi adapter with Linux monitor-mode support
 - Three female-to-female jumper wires
-- Flipper Zero with Aircrack-ng FZ 1.0.5
+- Flipper Zero with Aircrack-ng FZ 1.0.6
 
 Both devices use 3.3 V UART. Do not connect a 5 V UART signal, and do not connect either device's power pin to the other. Connect:
 
@@ -74,7 +74,7 @@ sudo /opt/aircrack-fz/venv/bin/python /opt/aircrack-fz/aircrack_fz_bridge.py \
 
 On the Flipper, set **Settings -> External baud -> 115200**, choose a channel, and open **External Aircrack-ng**. It should change from `Waiting for Pi` to the real version, interface, and `IDLE`. Press **OK** to capture and **OK** again to stop.
 
-The bridge accepts only the fixed `HELLO`, `STATUS`, `START channel`, and `STOP` protocol commands. It does not pass shell text from UART. Capture names use UTC time and are stored under `/var/lib/aircrack-fz/captures` by default. Retrieve a capture from your PC with `scp`, or copy it to the Flipper microSD card and inspect it through **Offline Aircrack Analysis**.
+The bridge accepts only the fixed `HELLO`, `STATUS`, `START channel`, and `STOP` protocol commands. It does not pass shell text from UART. Collision-resistant capture names use UTC time with microseconds and are stored under `/var/lib/aircrack-fz/captures` by default. Capture-directory, reader, and `airodump-ng` failures are returned to the Flipper as bounded errors. Retrieve a capture from your PC with `scp`, or copy it to the Flipper microSD card and inspect it through **Offline Aircrack Analysis**.
 
 For automatic startup, edit the interface in `aircrack-fz-bridge.service.example`, install it as `/etc/systemd/system/aircrack-fz-bridge.service`, then enable it with:
 
