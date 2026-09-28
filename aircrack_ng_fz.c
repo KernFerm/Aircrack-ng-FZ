@@ -32,7 +32,7 @@
 #define ACF_REPORT_PATH APP_DATA_PATH("report.txt")
 #define ACF_REPORT_PARTIAL APP_DATA_PATH("report.txt.partial")
 #define ACF_REPORT_BACKUP APP_DATA_PATH("report.txt.backup")
-#define ACF_APP_VERSION "1.0.6"
+#define ACF_APP_VERSION "1.0.8"
 
 typedef enum {
     AcfViewMain,

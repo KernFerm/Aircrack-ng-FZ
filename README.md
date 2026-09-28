@@ -1,8 +1,8 @@
 # Aircrack-ng FZ
 
-Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.6 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
+Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.8 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
 
-Current release: **v1.0.6**.
+Current release: **v1.0.8**.
 
 ## Install the FAP
 

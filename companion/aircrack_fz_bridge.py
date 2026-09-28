@@ -17,7 +17,7 @@ from pathlib import Path
 
 import serial
 
-BRIDGE_VERSION = "1.0.6"
+BRIDGE_VERSION = "1.0.8"
 PROTOCOL_VERSION = 1
 MAX_LINE = 192
 MAX_PACKET = 16 * 1024 * 1024

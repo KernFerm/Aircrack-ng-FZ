@@ -7,7 +7,7 @@ The companion makes live Wi-Fi possible by running genuine Aircrack-ng on a Rasp
 - Raspberry Pi or Linux computer
 - Dedicated USB Wi-Fi adapter with Linux monitor-mode support
 - Three female-to-female jumper wires
-- Flipper Zero with Aircrack-ng FZ 1.0.6
+- Flipper Zero with Aircrack-ng FZ 1.0.8
 
 Both devices use 3.3 V UART. Do not connect a 5 V UART signal, and do not connect either device's power pin to the other. Connect:
 

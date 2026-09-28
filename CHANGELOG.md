@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.8 — 2026-09-27
+
+- Refreshed application and companion version metadata.
+- Rebuilt and revalidated the target f7/API 87.1 FAP.
+
 ## 1.0.6 — 2026-09-27
 
 - Added a scrollable Settings > About page with version, native-mode, Linux/Raspberry Pi, safety, and license guidance.

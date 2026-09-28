@@ -232,7 +232,7 @@ static void receive_external(const AcfExternalMessage* message, void* context) {
 static void test_external_protocol(void) {
     AcfExternalMessage message;
     assert(acf_external_parse_line(
-        "ACF1 INFO 1 1.0.6 1.7 wlan1mon /var/lib/aircrack-fz/captures/a.cap",
+        "ACF1 INFO 1 1.0.8 1.7 wlan1mon /var/lib/aircrack-fz/captures/a.cap",
         &message));
     assert(message.type == AcfExternalMessageInfo);
     assert(message.protocol_version == 1);
@@ -251,7 +251,7 @@ static void test_external_protocol(void) {
     AcfExternalDecoder decoder;
     acf_external_decoder_reset(&decoder);
     MessageSink sink = {0};
-    const unsigned char first[] = "ACF1 INFO 1 1.0.6 1.7 ";
+    const unsigned char first[] = "ACF1 INFO 1 1.0.8 1.7 ";
     const unsigned char second[] = "wlan1mon /captures/a.cap\r\n";
     acf_external_decoder_feed(&decoder, first, sizeof(first) - 1, receive_external, &sink);
     assert(sink.count == 0);

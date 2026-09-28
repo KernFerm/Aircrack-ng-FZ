@@ -9,5 +9,5 @@ App(
     fap_category="Tools",
     fap_description="Capture analysis and external Linux Aircrack-ng controller",
     fap_author="Aircrack-ng contributors; Flipper port contributors",
-    fap_version="1.0.6",
+    fap_version="1.0.8",
 )
