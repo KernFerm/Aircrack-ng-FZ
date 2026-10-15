@@ -11,4 +11,4 @@
 
 Sub-GHz receive frequencies offered by default are 315.00, 433.92, 868.35, and 915.00 MHz. The device API rejects frequencies outside hardware support. This application contains no TX call, so firmware regional transmit policy cannot be bypassed.
 
-All Flipper symbols were compiled and linked against the official firmware 1.4.3 external SDK (target f7, API 87.1). No private firmware header or symbol is used. The external bridge requires Aircrack-ng, `iw`, Python 3, and pyserial on Linux. Physical Pi/UART/adapter validation is pending hardware availability.
+All Flipper symbols were compiled and linked against the official firmware 1.5.1 external SDK (target f7, API 88.2). No private firmware header or symbol is used. The external bridge requires Aircrack-ng, `iw`, Python 3, and pyserial on Linux. Physical Pi/UART/adapter validation is pending hardware availability.

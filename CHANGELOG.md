@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9 — 2026-10-15
+
+- Rebuilt for official Flipper firmware 1.5.1.
+- Updated target f7 compatibility from API 87.1 to API 88.2.
+- Preserved the existing native analysis, radio tools, UART protocol, and companion behavior.
+
 ## 1.0.8 — 2026-09-27
 
 - Refreshed application and companion version metadata.

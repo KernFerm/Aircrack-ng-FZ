@@ -9,8 +9,8 @@
 | Version | 1.7 development line (`version_major=1`, `version_minor=7`, `version_micro=0`) |
 | Clone command | `git clone --depth 1 https://github.com/aircrack-ng/aircrack-ng.git upstream-aircrack-ng` |
 | Upstream license | GNU GPL v2 or later, with the upstream OpenSSL linking exception where applicable |
-| Firmware baseline | Official Flipper firmware 1.4.3 |
-| SDK baseline | uFBT 0.2.6, release SDK 1.4.3, target f7, API 87.1 |
+| Firmware baseline | Official Flipper firmware 1.5.1 |
+| SDK baseline | uFBT 0.2.6, release SDK 1.5.1, target f7, API 88.2 |
 
 The unmodified upstream checkout is an analysis input, not an FAP build input. Desktop code depends on operating-system network interfaces, monitor-mode drivers, sockets, processes, terminal UI, SQLite/OpenSSL/libpcap, and memory budgets unavailable to an external Flipper app. The FAP carries only a small, audited parser adaptation; the upstream clone is intentionally not vendored into the application source directory.
 

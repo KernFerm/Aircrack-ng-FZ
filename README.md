@@ -1,12 +1,12 @@
 # Aircrack-ng FZ
 
-Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.8 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
+Aircrack-ng FZ inspects Aircrack-compatible capture files and analyzes the receive hardware built into a stock Flipper Zero. Version 1.0.9 includes an external Linux/Raspberry Pi mode: genuine Aircrack-ng runs on the Linux computer with a compatible monitor-mode Wi-Fi adapter, and the Flipper is its UART controller and live status display. The stock Flipper still does **not** contain Wi-Fi hardware.
 
-Current release: **v1.0.8**.
+Current release: **v1.0.9**.
 
 ## Install the FAP
 
-You need a Flipper Zero with a working microSD card. The supplied release build targets official firmware 1.4.3, target f7, API 87.1. A firmware build with an incompatible API may require the app to be rebuilt.
+You need a Flipper Zero with a working microSD card. The supplied release build targets official firmware 1.5.1, target f7, API 88.2. A firmware build with an incompatible API may require the app to be rebuilt.
 
 ### Install with qFlipper
 
@@ -80,7 +80,7 @@ Only inspect files, tags, and credentials that you own or are authorized to test
 
 ## Build from source
 
-Requirements: Python 3, `ufbt` 0.2.6 or newer, and official firmware/SDK 1.4.3 (API 87.1) or a compatible SDK.
+Requirements: Python 3, `ufbt` 0.2.6 or newer, and official firmware/SDK 1.5.1 (API 88.2) or a compatible SDK.
 
 ```powershell
 python -m pip install --upgrade ufbt
